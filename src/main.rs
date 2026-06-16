@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = ControlState::new();
     let tick_interval = state.tick_interval.clone();
 
-    let game = SnakeGame::new(&ctx, 60, 30);
+    let game = SnakeGame::new(&ctx, &state, 60, 30);
     let tick_game = game.clone();
     let restart_game = game.clone();
 
