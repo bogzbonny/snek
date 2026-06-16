@@ -127,7 +127,7 @@ impl SnakeGame {
             rec_evs.push(ReceivableEvent::from(key));
         }
 
-        SnakeGame {
+        let game = SnakeGame {
             pane: Pane::new(ctx, "snake_game"),
             snake: RefCell::new(snake),
             direction: RefCell::new(Direction::Right),
@@ -146,7 +146,9 @@ impl SnakeGame {
             ctrl_status_label: ctrl.status_label.clone(),
             last_board_w: RefCell::new(width),
             last_board_h: RefCell::new(height),
-        }
+        };
+        game.spawn_apple(width, height);
+        game
     }
 
     pub fn pane(&self) -> &Pane {
@@ -280,7 +282,7 @@ impl Element for SnakeGame {
                 }
             }
             GameState::GameOver => {
-                if is_dir_key(key) {
+                if key == Keyboard::KEY_SPACE || is_dir_key(key) {
                     self.restart();
                 }
             }
@@ -538,9 +540,9 @@ impl SnakeGame {
         let (hx, hy) = snake[0];
 
         let (nx, ny) = match dir {
-            Direction::Up => (hx, hy.saturating_sub(1)),
+            Direction::Up => (hx, hy.wrapping_sub(1)),
             Direction::Down => (hx, hy + 1),
-            Direction::Left => (hx.saturating_sub(1), hy),
+            Direction::Left => (hx.wrapping_sub(1), hy),
             Direction::Right => (hx + 1, hy),
         };
 
