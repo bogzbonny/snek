@@ -3,6 +3,7 @@ use std::time::Duration;
 use tokio::time::interval;
 use yeehaw::{ParentPane, Tui};
 
+mod controls;
 mod game;
 use game::SnakeGame;
 
