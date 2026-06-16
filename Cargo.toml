@@ -1,0 +1,8 @@
+[package]
+name = "snek"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+yeehaw = { path = "../yeehaw/yeehaw", features = ["textbox"] }
+rand = "0.8"
