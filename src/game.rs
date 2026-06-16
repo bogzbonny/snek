@@ -265,7 +265,7 @@ impl Element for SnakeGame {
             }
             GameState::GameOver => {
                 if is_dir_key(&key) {
-                    self.restart_game();
+                    self.restart();
                 }
             }
         }
@@ -457,7 +457,7 @@ impl SnakeGame {
         }
     }
 
-    fn restart_game(&self) {
+    pub fn restart(&self) {
         let (bw, bh) = match self.board_size {
             BoardSize::Auto => {
                 // simplification: uses last known board size; unknown at restart time without DrawRegion

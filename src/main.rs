@@ -1,34 +1,63 @@
-use std::time::Duration;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use tokio::time::interval;
-use yeehaw::{ParentPane, Tui};
+use yeehaw::{DynVal, Element, ParentPane, Tui, VerticalStack};
 
 mod controls;
 mod game;
+
+use controls::{build_control_bar, ControlState};
 use game::SnakeGame;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async {
-        let (mut tui, ctx) = Tui::new()?;
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let (mut tui, ctx) = Tui::new()?;
 
-        let game = SnakeGame::new(&ctx, 40, 20);
-        let root = ParentPane::new(&ctx, "root");
-        root.add_element(Box::new(game.clone()));
+    let state = ControlState::new();
+    let tick_interval = state.tick_interval.clone();
 
-        let tick_game = game.clone();
-        let tick_ctx = ctx.clone();
-        let mut iv = interval(Duration::from_millis(150));
+    let game = SnakeGame::new(&ctx, 60, 30);
+    let tick_game = game.clone();
+    let restart_game = game.clone();
 
-        let ls = tokio::task::LocalSet::new();
-        ls.spawn_local(async move {
-            loop {
-                iv.tick().await;
-                tick_game.tick(&tick_ctx);
+    let restart_fn = Rc::new(RefCell::new(move || restart_game.restart()));
+    let control_bar = build_control_bar(&ctx, state, restart_fn);
+
+    // Layout: VerticalStack — game (~80%) then control bar (~20%)
+    let stack = VerticalStack::new(&ctx);
+
+    {
+        let mut loc = game.get_dyn_location_set().clone();
+        loc.set_dyn_height(DynVal::new_flex(0.8));
+        game.set_dyn_location_set(loc);
+    }
+    stack.push(Box::new(game));
+
+    {
+        let mut loc = control_bar.get_dyn_location_set().clone();
+        loc.set_dyn_height(DynVal::new_flex(0.2));
+        control_bar.set_dyn_location_set(loc);
+    }
+    stack.push(control_bar);
+
+    let root = ParentPane::new(&ctx, "root");
+    root.add_element(Box::new(stack));
+
+    // Tick loop — interval resets when the shared duration changes
+    let tick_ctx = ctx.clone();
+    let ls = tokio::task::LocalSet::new();
+    ls.spawn_local(async move {
+        let mut iv = interval(*tick_interval.borrow());
+        loop {
+            let new_dur = *tick_interval.borrow();
+            if new_dur != iv.period() {
+                iv = interval(new_dur);
             }
-        });
+            iv.tick().await;
+            tick_game.tick(&tick_ctx);
+        }
+    });
 
-        ls.block_on(&rt, async { tui.run(Box::new(root)).await })?;
-        Ok(())
-    })
+    ls.run_until(tui.run(Box::new(root))).await.map_err(Into::into)
 }
