@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
+use rand::Rng;
 use yeehaw::{
     Attributes, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element, ElementID,
     Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, ReceivableEvent,
@@ -8,6 +9,7 @@ use yeehaw::{
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum BoardSize {
     Auto,
     Fixed(usize, usize),
@@ -29,6 +31,7 @@ pub enum GameState {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum Theme {
     Classic,
     Neon,
@@ -86,6 +89,7 @@ fn fg_style(color: Color) -> Style {
     }
 }
 
+#[allow(dead_code)]
 impl SnakeGame {
     pub fn new(ctx: &Context, width: usize, height: usize) -> Self {
         let cx = width / 2;
@@ -224,43 +228,43 @@ impl Element for SnakeGame {
         let state = *self.state.borrow();
         let is_dir_key = |key: &crossterm::event::KeyEvent| -> bool {
             matches!(
-                *key,
-                Keyboard::KEY_H
-                    | Keyboard::KEY_J
-                    | Keyboard::KEY_K
-                    | Keyboard::KEY_L
-                    | Keyboard::KEY_LEFT
-                    | Keyboard::KEY_RIGHT
-                    | Keyboard::KEY_UP
-                    | Keyboard::KEY_DOWN
+                key.code,
+                crossterm::event::KeyCode::Char('h')
+                    | crossterm::event::KeyCode::Char('j')
+                    | crossterm::event::KeyCode::Char('k')
+                    | crossterm::event::KeyCode::Char('l')
+                    | crossterm::event::KeyCode::Left
+                    | crossterm::event::KeyCode::Right
+                    | crossterm::event::KeyCode::Up
+                    | crossterm::event::KeyCode::Down
             )
         };
 
         let key = match _ev {
-            Event::KeyCombo(keys) if keys.len() == 1 => &keys[0],
+            Event::KeyCombo(keys) if keys.len() == 1 => keys[0],
             _ => return (false, EventResponses::default()),
         };
 
         // q always quits
-        if *key == Keyboard::KEY_Q {
+        if key == Keyboard::KEY_Q {
             return (true, EventResponses::from(EventResponse::Quit));
         }
 
         match state {
             GameState::Paused => {
-                if *key == Keyboard::KEY_SPACE {
+                if key == Keyboard::KEY_SPACE {
                     *self.state.borrow_mut() = GameState::Running;
                 }
             }
             GameState::Running => {
-                if *key == Keyboard::KEY_SPACE {
+                if key == Keyboard::KEY_SPACE {
                     *self.state.borrow_mut() = GameState::Paused;
                 } else {
-                    self.handle_direction(key, is_dir_key(key));
+                    self.handle_direction(&key, is_dir_key(&key));
                 }
             }
             GameState::GameOver => {
-                if is_dir_key(key) {
+                if is_dir_key(&key) {
                     self.restart_game();
                 }
             }
@@ -347,7 +351,7 @@ impl Element for SnakeGame {
                 } else if snake.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
                     DrawCh::new('■', body_color.clone())
                 } else if apple == (x, y) {
-                    DrawCh::new('ἴe', apple_color.clone())
+                    DrawCh::new('e', apple_color.clone())
                 } else {
                     DrawCh::new(' ', black.clone())
                 };
@@ -431,13 +435,14 @@ impl Element for SnakeGame {
     }
 }
 
+#[allow(dead_code)]
 impl SnakeGame {
     fn handle_direction(&self, key: &crossterm::event::KeyEvent, _is_dir: bool) {
-        let new_dir = match *key {
-            Keyboard::KEY_K | Keyboard::KEY_UP => Direction::Up,
-            Keyboard::KEY_J | Keyboard::KEY_DOWN => Direction::Down,
-            Keyboard::KEY_H | Keyboard::KEY_LEFT => Direction::Left,
-            Keyboard::KEY_L | Keyboard::KEY_RIGHT => Direction::Right,
+        let new_dir = match key.code {
+            crossterm::event::KeyCode::Char('k') | crossterm::event::KeyCode::Up => Direction::Up,
+            crossterm::event::KeyCode::Char('j') | crossterm::event::KeyCode::Down => Direction::Down,
+            crossterm::event::KeyCode::Char('h') | crossterm::event::KeyCode::Left => Direction::Left,
+            crossterm::event::KeyCode::Char('l') | crossterm::event::KeyCode::Right => Direction::Right,
             _ => return,
         };
         let cur = *self.direction.borrow();
@@ -468,5 +473,78 @@ impl SnakeGame {
         *self.score.borrow_mut() = 0;
         *self.state.borrow_mut() = GameState::Running;
         *self.last_tick.borrow_mut() = Instant::now();
+    }
+
+    /// Advance game state by one tick. Called on each game loop iteration.
+    pub fn tick(&self, _ctx: &Context) {
+        // Guard: only tick while running
+        if *self.state.borrow() != GameState::Running {
+            return;
+        }
+
+        // Throttle to tick_interval
+        if self.last_tick.borrow().elapsed() < self.tick_interval {
+            return;
+        }
+        *self.last_tick.borrow_mut() = Instant::now();
+
+        // Snapshot immutable values before any mutation
+        let dir = *self.direction.borrow();
+        let (bw, bh) = match self.board_size {
+            BoardSize::Fixed(w, h) => (w, h),
+            // simplification: Auto board size unknown during tick; uses fallback
+            BoardSize::Auto => (10, 10),
+        };
+        let apple = *self.apple.borrow();
+        let mut snake = self.snake.borrow_mut();
+        let (hx, hy) = snake[0];
+
+        // Compute new head position
+        let (nx, ny) = match dir {
+            Direction::Up => (hx, hy.saturating_sub(1)),
+            Direction::Down => (hx, hy + 1),
+            Direction::Left => (hx.saturating_sub(1), hy),
+            Direction::Right => (hx + 1, hy),
+        };
+
+        // Wall collision → game over
+        if nx >= bw || ny >= bh {
+            drop(snake);
+            *self.state.borrow_mut() = GameState::GameOver;
+            return;
+        }
+
+        // Self collision → game over (check against all body segments)
+        if snake.iter().any(|&(sx, sy)| sx == nx && sy == ny) {
+            drop(snake);
+            *self.state.borrow_mut() = GameState::GameOver;
+            return;
+        }
+
+        // Apple collision: grow (don't pop tail), increment score, spawn new apple
+        if (nx, ny) == apple {
+            snake.insert(0, (nx, ny));
+
+            // Update score and high_score
+            let new_score = { *self.score.borrow_mut() += 1; *self.score.borrow() };
+            if new_score > *self.high_score.borrow() {
+                *self.high_score.borrow_mut() = new_score;
+            }
+
+            // Spawn new apple at a random empty cell
+            // simplification: O(n) scan per candidate; acceptable for board sizes < 10000 cells
+            loop {
+                let rx = rand::thread_rng().gen_range(0..bw);
+                let ry = rand::thread_rng().gen_range(0..bh);
+                if !snake.iter().any(|&(sx, sy)| sx == rx && sy == ry) {
+                    *self.apple.borrow_mut() = (rx, ry);
+                    break;
+                }
+            }
+        } else {
+            // Normal move: pop tail, push new head
+            snake.pop();
+            snake.insert(0, (nx, ny));
+        }
     }
 }
