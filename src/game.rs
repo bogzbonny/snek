@@ -238,7 +238,7 @@ impl Element for SnakeGame {
         }
     }
 
-    fn receive_event(&self, _ctx: &Context, _ev: Event) -> (bool, EventResponses) {
+    fn receive_event(&self, _ctx: &Context, ev: Event) -> (bool, EventResponses) {
         let state = *self.ctrl_state.borrow();
 
         let is_dir_key = |k: KeyEvent| -> bool {
@@ -257,7 +257,7 @@ impl Element for SnakeGame {
             )
         };
 
-        let key = match _ev {
+        let key = match ev {
             Event::KeyCombo(keys) if keys.len() == 1 => keys[0],
             _ => return (false, EventResponses::default()),
         };
@@ -333,26 +333,32 @@ impl Element for SnakeGame {
         let head_color = fg_style(theme.head_color());
         let body_color = fg_style(theme.body_color());
         let apple_color = fg_style(theme.apple_color());
-        let black = fg_style(Color::new(0, 0, 0));
+        let border_color = fg_style(Color::new(128, 128, 128));
+        let default_style = Style {
+            fg: None,
+            bg: None,
+            underline_color: None,
+            attr: Attributes::new(),
+        };
 
         let bl = border_x;
         let br_ = border_x + board_w + 1;
         let bt = border_y;
         let bb = border_y + board_h + 1;
 
-        chs.push(DrawChPos::new(DrawCh::new('┌', black.clone()), bl as u16, bt as u16));
-        chs.push(DrawChPos::new(DrawCh::new('┐', black.clone()), br_ as u16, bt as u16));
-        chs.push(DrawChPos::new(DrawCh::new('└', black.clone()), bl as u16, bb as u16));
-        chs.push(DrawChPos::new(DrawCh::new('┘', black.clone()), br_ as u16, bb as u16));
+        chs.push(DrawChPos::new(DrawCh::new('┌', border_color.clone()), bl as u16, bt as u16));
+        chs.push(DrawChPos::new(DrawCh::new('┐', border_color.clone()), br_ as u16, bt as u16));
+        chs.push(DrawChPos::new(DrawCh::new('└', border_color.clone()), bl as u16, bb as u16));
+        chs.push(DrawChPos::new(DrawCh::new('┘', border_color.clone()), br_ as u16, bb as u16));
 
         for x in (bl + 1)..br_ {
-            chs.push(DrawChPos::new(DrawCh::new('─', black.clone()), x as u16, bt as u16));
-            chs.push(DrawChPos::new(DrawCh::new('─', black.clone()), x as u16, bb as u16));
+            chs.push(DrawChPos::new(DrawCh::new('─', border_color.clone()), x as u16, bt as u16));
+            chs.push(DrawChPos::new(DrawCh::new('─', border_color.clone()), x as u16, bb as u16));
         }
 
         for y in (bt + 1)..bb {
-            chs.push(DrawChPos::new(DrawCh::new('│', black.clone()), bl as u16, y as u16));
-            chs.push(DrawChPos::new(DrawCh::new('│', black.clone()), br_ as u16, y as u16));
+            chs.push(DrawChPos::new(DrawCh::new('│', border_color.clone()), bl as u16, y as u16));
+            chs.push(DrawChPos::new(DrawCh::new('│', border_color.clone()), br_ as u16, y as u16));
         }
 
         let gx = border_x + 1;
@@ -368,7 +374,7 @@ impl Element for SnakeGame {
                 } else if apple == (x, y) {
                     DrawCh::new('e', apple_color.clone())
                 } else {
-                    DrawCh::new(' ', black.clone())
+                    DrawCh::new(' ', default_style.clone())
                 };
                 chs.push(DrawChPos::new(ch, sx as u16, sy as u16));
             }
@@ -478,6 +484,10 @@ impl SnakeGame {
 
     fn spawn_apple(&self, bw: usize, bh: usize) {
         let snake = self.snake.borrow();
+        // Guard: if snake fills the board, no empty cell exists — avoid infinite loop.
+        if snake.len() >= bw * bh {
+            return;
+        }
         loop {
             let rx = rand::thread_rng().gen_range(0..bw);
             let ry = rand::thread_rng().gen_range(0..bh);
