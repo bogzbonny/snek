@@ -26,6 +26,23 @@ pub struct ControlState {
 impl ControlState {
     pub fn new(_ctx: &Context) -> Self {
         let cfg = Config::load();
+        Self::from_loaded(cfg)
+    }
+
+    /// Create a ControlState with hardcoded defaults. Does not read from disk.
+    pub fn for_test() -> Self {
+        Self {
+            tick_interval: Rc::new(RefCell::new(Duration::from_millis(26))),
+            board_size: Rc::new(RefCell::new(BoardSize::Auto)),
+            theme: Rc::new(RefCell::new(Theme::Classic)),
+            score: Rc::new(RefCell::new(0)),
+            high_score: Rc::new(RefCell::new(0)),
+            state: Rc::new(RefCell::new(GameState::Paused)),
+            num_apples: Rc::new(RefCell::new(1)),
+        }
+    }
+
+    fn from_loaded(cfg: Config) -> Self {
 
         let board_size = match cfg.board_size.as_str() {
             "Auto" => BoardSize::Auto,

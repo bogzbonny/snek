@@ -10,7 +10,7 @@ use snek::game::{BoardSize, Direction, GameState, SnakeGame};
 
 fn make_game() -> (SnakeGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     let game = SnakeGame::new(&ctx, &ctrl);
     (game, ctrl, ctx)
 }
@@ -19,7 +19,7 @@ fn make_game() -> (SnakeGame, ControlState, yeehaw::Context) {
 /// Snake head starts at (10, 5), direction Right.
 fn make_initialized_game() -> (SnakeGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
     let game = SnakeGame::new(&ctx, &ctrl);
     game.restart(); // initializes board: head=(10,5), body=(9,5), tail=(8,5), dir=Right
@@ -410,7 +410,7 @@ fn make_hierarchy(focus_stack: bool, focus_game: bool) -> (SnakeGame, ParentPane
     use std::rc::Rc;
 
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
     let game = SnakeGame::new(&ctx, &ctrl);
     game.restart();
@@ -960,7 +960,7 @@ fn test_apple_not_on_border_after_init() {
 #[test]
 fn test_apple_not_on_border_after_many_restarts() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..100 {
@@ -979,7 +979,7 @@ fn test_apple_not_on_border_after_many_restarts() {
 #[test]
 fn test_apple_not_on_border_small_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(10, 8);
 
     for i in 0..100 {
@@ -999,7 +999,7 @@ fn test_apple_not_on_border_small_board() {
 #[test]
 fn test_apple_not_in_any_corner() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     let corners = [(0, 0), (19, 0), (0, 9), (19, 9)];
@@ -1021,7 +1021,7 @@ fn test_apple_not_in_any_corner() {
 #[test]
 fn test_apple_not_on_left_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
@@ -1042,7 +1042,7 @@ fn test_apple_not_on_left_border() {
 #[test]
 fn test_apple_not_on_right_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
@@ -1062,7 +1062,7 @@ fn test_apple_not_on_right_border() {
 #[test]
 fn test_apple_not_on_top_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
@@ -1082,7 +1082,7 @@ fn test_apple_not_on_top_border() {
 #[test]
 fn test_apple_not_on_bottom_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
@@ -1102,7 +1102,7 @@ fn test_apple_not_on_bottom_border() {
 #[test]
 fn test_apple_on_minimum_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(4, 4);
 
     for i in 0..100 {
@@ -1121,7 +1121,7 @@ fn test_apple_on_minimum_board() {
 #[test]
 fn test_apple_not_on_border_square_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(16, 16);
 
     for i in 0..200 {
@@ -1259,7 +1259,7 @@ fn test_restart_clears_direction_queue() {
 #[test]
 fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Auto;
     let game = SnakeGame::new(&ctx, &ctrl);
 
@@ -1299,7 +1299,7 @@ fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
 /// direction Right. Inner spawn area is (1..5)×(1..3) = 8 cells.
 fn make_tiny_game() -> (SnakeGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::new(&ctx);
+    let ctrl = ControlState::for_test();
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(6, 4);
     let game = SnakeGame::new(&ctx, &ctrl);
     game.restart(); // head=(3,2), body=(2,2), tail=(1,2), dir=Right
