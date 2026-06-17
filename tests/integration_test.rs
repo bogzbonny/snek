@@ -1484,10 +1484,15 @@ fn test_apple_position_valid_after_respawn() {
         assert!(apple.0 > 0 && apple.0 < 5, "apple x={} must be in (0, 5)", apple.0);
         assert!(apple.1 > 0 && apple.1 < 3, "apple y={} must be in (0, 3)", apple.1);
         let snake = game.snake();
-        assert!(
-            !snake.iter().any(|s| *s == apple),
-            "apple ({:?}) must not overlap snake",
-            apple
-        );
+        // When the snake fills the entire inner area there is nowhere to
+        // respawn — the apple stays at the cell just eaten (on the head).
+        let inner_area = 4 * 2; // inner_w * inner_h for Fixed(6, 4)
+        if snake.len() < inner_area {
+            assert!(
+                !snake.iter().any(|s| *s == apple),
+                "apple ({:?}) must not overlap snake",
+                apple
+            );
+        }
     }
 }

@@ -651,11 +651,13 @@ impl SnakeGame {
             .filter(|&(x, y)| !snake.iter().any(|&(sx, sy)| sx == x && sy == y))
             .collect();
 
-        if let Some(pos) = free.get(rand::thread_rng().gen_range(0..free.len())) {
-            *self.apple.borrow_mut() = *pos;
+        if free.is_empty() {
+            // Snake fills the entire inner area — leave apple at its current
+            // position (the cell just eaten, hidden behind the snake head).
+            return;
         }
-        // If free is empty the snake fills the entire inner area — nothing
-        // we can do; leave apple at its current position.
+        let pos = free[rand::thread_rng().gen_range(0..free.len())];
+        *self.apple.borrow_mut() = pos;
     }
 
     pub fn restart(&self) {
