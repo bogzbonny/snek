@@ -978,7 +978,7 @@ fn test_apple_not_on_border_after_init() {
     // Board is 20×10; border cells are x=0, x=19, y=0, y=9
     let apple = game.apple();
     assert!(
-        !is_on_border(apple, 20, 10),
+        !is_on_border((apple.x, apple.y), 20, 10),
         "apple {:?} must not be on the border of a 20×10 board",
         apple
     );
@@ -995,7 +995,7 @@ fn test_apple_not_on_border_after_many_restarts() {
         game.restart();
         let apple = game.apple();
         assert!(
-            !is_on_border(apple, 20, 10),
+            !is_on_border((apple.x, apple.y), 20, 10),
             "restart {}: apple {:?} must not be on the border of a 20×10 board",
             i,
             apple
@@ -1014,7 +1014,7 @@ fn test_apple_not_on_border_small_board() {
         game.restart();
         let apple = game.apple();
         assert!(
-            !is_on_border(apple, 10, 8),
+            !is_on_border((apple.x, apple.y), 10, 8),
             "restart {}: apple {:?} must not be on the border of a 10×8 board",
             i,
             apple
@@ -1036,7 +1036,7 @@ fn test_apple_not_in_any_corner() {
         let apple = game.apple();
         for (ci, corner) in corners.iter().enumerate() {
             assert_ne!(
-                apple, *corner,
+                (apple.x, apple.y), *corner,
                 "restart {}: apple must not be at corner {} ({:?})",
                 i, ci, corner
             );
@@ -1054,7 +1054,9 @@ fn test_apple_not_on_left_border() {
     for i in 0..500 {
         let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
-        let (ax, ay) = game.apple();
+        let apple = game.apple();
+        let ax = apple.x;
+        let ay = apple.y;
         assert!(
             ax != 0,
             "restart {}: apple x={} must not be on left border (x=0)",
@@ -1075,7 +1077,9 @@ fn test_apple_not_on_right_border() {
     for i in 0..500 {
         let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
-        let (ax, ay) = game.apple();
+        let apple = game.apple();
+        let ax = apple.x;
+        let ay = apple.y;
         assert!(
             ax != 19,
             "restart {}: apple x={} must not be on right border (x=19)",
@@ -1095,7 +1099,9 @@ fn test_apple_not_on_top_border() {
     for i in 0..500 {
         let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
-        let (ax, ay) = game.apple();
+        let apple = game.apple();
+        let ax = apple.x;
+        let ay = apple.y;
         assert!(
             ay != 0,
             "restart {}: apple y={} must not be on top border (y=0)",
@@ -1115,7 +1121,9 @@ fn test_apple_not_on_bottom_border() {
     for i in 0..500 {
         let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
-        let (ax, ay) = game.apple();
+        let apple = game.apple();
+        let ax = apple.x;
+        let ay = apple.y;
         assert!(
             ay != 9,
             "restart {}: apple y={} must not be on bottom border (y=9)",
@@ -1137,7 +1145,7 @@ fn test_apple_on_minimum_board() {
         game.restart();
         let apple = game.apple();
         assert!(
-            !is_on_border(apple, 4, 4),
+            !is_on_border((apple.x, apple.y), 4, 4),
             "restart {}: apple {:?} must not be on border of 4×4 board",
             i, apple
         );
@@ -1156,7 +1164,7 @@ fn test_apple_not_on_border_square_board() {
         game.restart();
         let apple = game.apple();
         assert!(
-            !is_on_border(apple, 16, 16),
+            !is_on_border((apple.x, apple.y), 16, 16),
             "restart {}: apple {:?} must not be on border of 16×16 board",
             i, apple
         );
@@ -1296,7 +1304,7 @@ fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
 
     // Board should be initialised — apple position should not be (0,0)
     let apple_before = game.apple();
-    assert_ne!(apple_before, (0, 0), "board should be initialised");
+    assert_ne!((apple_before.x, apple_before.y), (0, 0), "board should be initialised");
 
     // 2) Draw with a smaller DrawRegion (40x20 pane → 38x18 board).
     //    Without the fix the cache would shrink and tick() would use 38x18
@@ -1349,13 +1357,13 @@ fn steer_to_apple(game: &SnakeGame, ctrl: &ControlState, ctx: &yeehaw::Context) 
 
         // Greedy: move toward apple
         let mut next_dir = dir;
-        if apple.0 > head.0 && dir != Direction::Left {
+        if apple.x > head.0 && dir != Direction::Left {
             next_dir = Direction::Right;
-        } else if apple.0 < head.0 && dir != Direction::Right {
+        } else if apple.x < head.0 && dir != Direction::Right {
             next_dir = Direction::Left;
-        } else if apple.1 > head.1 && dir != Direction::Up {
+        } else if apple.y > head.1 && dir != Direction::Up {
             next_dir = Direction::Down;
-        } else if apple.1 < head.1 && dir != Direction::Down {
+        } else if apple.y < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
         } else {
             // Cannot move toward apple directly (would need to reverse).
@@ -1391,7 +1399,7 @@ fn steer_to_apple(game: &SnakeGame, ctrl: &ControlState, ctx: &yeehaw::Context) 
             // Verify new apple is not on the snake
             let snake = game.snake();
             assert!(
-                !snake.iter().any(|s| *s == apple_after),
+                !snake.iter().any(|s| *s == (apple_after.x, apple_after.y)),
                 "respawned apple ({:?}) must not overlap snake",
                 apple_after
             );
@@ -1431,13 +1439,13 @@ fn test_apple_always_respawns_after_multiple_eats() {
         let head = game.snake()[0];
         let dir = game.direction();
         let mut next_dir = dir;
-        if apple.0 > head.0 && dir != Direction::Left {
+        if apple.x > head.0 && dir != Direction::Left {
             next_dir = Direction::Right;
-        } else if apple.0 < head.0 && dir != Direction::Right {
+        } else if apple.x < head.0 && dir != Direction::Right {
             next_dir = Direction::Left;
-        } else if apple.1 > head.1 && dir != Direction::Up {
+        } else if apple.y > head.1 && dir != Direction::Up {
             next_dir = Direction::Down;
-        } else if apple.1 < head.1 && dir != Direction::Down {
+        } else if apple.y < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
         } else {
             // Cannot move toward apple directly (would need to reverse).
@@ -1463,7 +1471,7 @@ fn test_apple_always_respawns_after_multiple_eats() {
             assert_ne!(current, prev_apple, "new apple must differ from old");
             // Verify new apple is valid
             let snake = game.snake();
-            assert!(!snake.iter().any(|s| *s == current), "apple must not overlap snake");
+            assert!(!snake.iter().any(|s| *s == (current.x, current.y)), "apple must not overlap snake");
             eats += 1;
             prev_apple = current;
         }
@@ -1500,13 +1508,13 @@ fn test_apple_position_valid_after_respawn() {
         let head = game.snake()[0];
         let dir = game.direction();
         let mut next_dir = dir;
-        if apple.0 > head.0 && dir != Direction::Left {
+        if apple.x > head.0 && dir != Direction::Left {
             next_dir = Direction::Right;
-        } else if apple.0 < head.0 && dir != Direction::Right {
+        } else if apple.x < head.0 && dir != Direction::Right {
             next_dir = Direction::Left;
-        } else if apple.1 > head.1 && dir != Direction::Up {
+        } else if apple.y > head.1 && dir != Direction::Up {
             next_dir = Direction::Down;
-        } else if apple.1 < head.1 && dir != Direction::Down {
+        } else if apple.y < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
         }
         if next_dir != dir {
@@ -1522,15 +1530,15 @@ fn test_apple_position_valid_after_respawn() {
         game.tick(&ctx);
         let apple = game.apple();
         // For Fixed(6, 4): valid inner area is x in [1..5], y in [1..3]
-        assert!(apple.0 > 0 && apple.0 < 5, "apple x={} must be in (0, 5)", apple.0);
-        assert!(apple.1 > 0 && apple.1 < 3, "apple y={} must be in (0, 3)", apple.1);
+        assert!(apple.x > 0 && apple.x < 5, "apple x={} must be in (0, 5)", apple.x);
+        assert!(apple.y > 0 && apple.y < 3, "apple y={} must be in (0, 3)", apple.y);
         let snake = game.snake();
         // When the snake fills the entire inner area there is nowhere to
         // respawn — the apple stays at the cell just eaten (on the head).
         let inner_area = 4 * 2; // inner_w * inner_h for Fixed(6, 4)
         if snake.len() < inner_area {
             assert!(
-                !snake.iter().any(|s| *s == apple),
+                !snake.iter().any(|s| *s == (apple.x, apple.y)),
                 "apple ({:?}) must not overlap snake",
                 apple
             );

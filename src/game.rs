@@ -43,6 +43,21 @@ pub enum Theme {
     Amber,
 }
 
+/// Kind of food item on the board.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FoodKind {
+    RedApple,
+}
+
+/// A food item the snake can consume.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Food {
+    pub kind: FoodKind,
+    pub x: usize,
+    pub y: usize,
+    pub consumed: bool,
+}
+
 impl Theme {
     pub fn head_color(self) -> Color {
         match self {
@@ -74,7 +89,7 @@ pub struct SnakeGame {
     pane: Pane,
     snake: Rc<RefCell<Vec<(usize, usize)>>>,
     direction: Rc<RefCell<Direction>>,
-    apples: Rc<RefCell<Vec<(usize, usize)>>>,
+    apples: Rc<RefCell<Vec<Food>>>,
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
     ctrl_board_size: Rc<RefCell<BoardSize>>,
@@ -160,11 +175,11 @@ impl SnakeGame {
         *self.direction.borrow()
     }
 
-    pub fn apple(&self) -> (usize, usize) {
-        *self.apples.borrow().first().unwrap_or(&(0, 0))
+    pub fn apple(&self) -> Food {
+        *self.apples.borrow().first().unwrap_or(&Food { kind: FoodKind::RedApple, x: 0, y: 0, consumed: true })
     }
 
-    pub fn apples(&self) -> Vec<(usize, usize)> {
+    pub fn apples(&self) -> Vec<Food> {
         self.apples.borrow().clone()
     }
 
@@ -227,7 +242,7 @@ impl SnakeGame {
         *self.direction.borrow_mut() = Direction::Right;
         *self.ctrl_score.borrow_mut() = 0;
         self.apples.borrow_mut().clear();
-        self.spawn_apple(bw, bh, None);
+        self.spawn_apple(bw, bh);
         *self.board_initialized.borrow_mut() = true;
     }
 }
@@ -509,7 +524,7 @@ impl Element for SnakeGame {
                         DrawCh::new('◆', head_color.clone())
                     } else if snake.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
                         DrawCh::new('■', body_color.clone())
-                    } else if apples.iter().any(|&(ax, ay)| ax == x && ay == y) {
+                    } else if apples.iter().any(|f| !f.consumed && f.x == x && f.y == y) {
                         DrawCh::new('🍎', apple_color.clone())
                     } else {
                         DrawCh::new(' ', default_style.clone())
@@ -637,16 +652,14 @@ impl SnakeGame {
         }
     }
 
-    /// Test helper: replace all apples with a single apple at the given position.
+    /// Test helper: replace all food with a single RedApple at the given position.
     pub fn spawn_apple_at(&self, x: usize, y: usize) {
         self.apples.borrow_mut().clear();
-        self.apples.borrow_mut().push((x, y));
+        self.apples.borrow_mut().push(Food { kind: FoodKind::RedApple, x, y, consumed: false });
     }
 
-    /// Spawn apples to reach target count. If `eaten_at` is Some, that apple
-    /// is removed first and replaced. If no free cell exists for replacement,
-    /// the eaten apple stays (preserves valid apple position for tests).
-    fn spawn_apple(&self, bw: usize, bh: usize, eaten_at: Option<(usize, usize)>) {
+    /// Remove consumed food and spawn new food to reach target count.
+    fn spawn_apple(&self, bw: usize, bh: usize) {
         let inner_w = bw.saturating_sub(2);
         let inner_h = bh.saturating_sub(2);
         if inner_w * inner_h < 4 {
@@ -659,60 +672,29 @@ impl SnakeGame {
             return;
         }
 
-        let snake = self.snake.borrow();
+        // Remove consumed food
+        apples.retain(|f| !f.consumed);
 
-        if let Some(eaten) = eaten_at {
-            // Check free cells assuming eaten apple will be freed
-            // Exclude eaten apple from occupied (it will be freed), but keep
-            // snake cells — the head is at `eaten` and must remain occupied.
-            let occupied: std::collections::HashSet<_> = snake.iter()
-                .chain(apples.iter().filter(|p| **p != eaten))
-                .cloned()
-                .collect();
-            let free: Vec<_> = (1..=inner_w)
-                .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
-                .filter(|p| !occupied.contains(p))
-                .collect();
-            drop(snake);
-            if free.is_empty() {
-                // Nowhere to respawn — eaten apple stays
-                return;
+        let snake = self.snake.borrow();
+        let occupied: std::collections::HashSet<_> = snake.iter()
+            .copied()
+            .chain(apples.iter().map(|f| (f.x, f.y)))
+            .collect();
+        let free: Vec<_> = (1..=inner_w)
+            .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
+            .filter(|p| !occupied.contains(p))
+            .collect();
+        drop(snake);
+        let mut rng = rand::thread_rng();
+        let needed = target.saturating_sub(apples.len());
+        let mut available = free;
+        for _ in 0..needed {
+            if available.is_empty() {
+                break;
             }
-            // Remove eaten apple and spawn replacement
-            apples.retain(|p| *p != eaten);
-            let mut rng = rand::thread_rng();
-            let mut available = free;
-            // Replace eaten apple
             let idx = rng.gen_range(0..available.len());
-            apples.push(available.remove(idx));
-            // Top up to target, ensuring no apple overlaps another
-            let needed = target.saturating_sub(apples.len());
-            for _ in 0..needed {
-                if available.is_empty() {
-                    break;
-                }
-                let idx = rng.gen_range(0..available.len());
-                apples.push(available.remove(idx));
-            }
-        } else {
-            // Initial spawn: add apples to reach target
-            let occupied: std::collections::HashSet<_> = snake.iter().chain(apples.iter()).cloned().collect();
-            let free: Vec<_> = (1..=inner_w)
-                .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
-                .filter(|p| !occupied.contains(p))
-                .collect();
-            drop(snake);
-            let mut rng = rand::thread_rng();
-            let needed = target.saturating_sub(apples.len());
-            let mut available = free;
-            for _ in 0..needed {
-                if available.is_empty() {
-                    break;
-                }
-                let idx = rng.gen_range(0..available.len());
-                let pos = available.remove(idx);
-                apples.push(pos);
-            }
+            let pos = available.remove(idx);
+            apples.push(Food { kind: FoodKind::RedApple, x: pos.0, y: pos.1, consumed: false });
         }
     }
 
@@ -784,7 +766,7 @@ impl SnakeGame {
         // Compute eating flag and drop apples borrow immediately
         let eating = {
             let apples = self.apples.borrow();
-            apples.iter().any(|&(ax, ay)| ax == nx && ay == ny)
+            apples.iter().any(|f| !f.consumed && f.x == nx && f.y == ny)
         };
 
         if nx >= bw || ny >= bh {
@@ -833,8 +815,17 @@ impl SnakeGame {
             }
 
             drop(snake);
-            // Respawn: replace eaten apple. If no free cells, eaten apple stays.
-            self.spawn_apple(bw, bh, Some((nx, ny)));
+            // Mark the eaten food as consumed and respawn
+            {
+                let mut foods = self.apples.borrow_mut();
+                for f in foods.iter_mut() {
+                    if f.x == nx && f.y == ny && !f.consumed {
+                        f.consumed = true;
+                        break;
+                    }
+                }
+            }
+            self.spawn_apple(bw, bh);
         } else {
             snake.pop();
             snake.insert(0, (nx, ny));
