@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use yeehaw::{
     Button, Context, DropdownList, DynVal, Element, EventResponses, Label, ParentPane, Slider,
+    SingleLineTextBox,
 };
 
 use crate::config::Config;
@@ -114,23 +115,52 @@ pub fn build_control_bar(
     });
     pane.add_element(Box::new(speed_slider.at(7, 0)));
 
-    // Board size dropdown
+    // Board size textboxes
     let board_size = state.board_size.clone();
     let tick_interval = state.tick_interval.clone();
     let theme = state.theme.clone();
     let high_score = state.high_score.clone();
     let num_foods = state.num_foods.clone();
-    let size_dropdown = DropdownList::new(
-        ctx,
-        vec!["Auto", "20x10", "30x15", "40x20", "50x25", "60x30"],
-        Box::new(move |_ctx, selected| {
-            let bs = match selected.as_str() {
-                "Auto" => BoardSize::Auto,
-                "20x10" => BoardSize::Fixed(20, 10),
-                "30x15" => BoardSize::Fixed(30, 15),
-                "40x20" => BoardSize::Fixed(40, 20),
-                "50x25" => BoardSize::Fixed(50, 25),
-                "60x30" => BoardSize::Fixed(60, 30),
+
+    let width_tb = SingleLineTextBox::new(ctx);
+    let height_tb = SingleLineTextBox::new(ctx);
+
+    match *board_size.borrow() {
+        BoardSize::Auto => {
+            width_tb.set_text("Auto".to_string());
+            height_tb.set_text("Auto".to_string());
+        }
+        BoardSize::Fixed(w, h) => {
+            width_tb.set_text(w.to_string());
+            height_tb.set_text(h.to_string());
+        }
+    }
+
+    width_tb.tb.set_dyn_width(DynVal::new_fixed(4));
+    height_tb.tb.set_dyn_width(DynVal::new_fixed(4));
+
+    // Width textbox hook
+    {
+        let board_size = board_size.clone();
+        let tick_interval = tick_interval.clone();
+        let theme = theme.clone();
+        let high_score = high_score.clone();
+        let num_foods = num_foods.clone();
+        let height_tb = height_tb.clone();
+        let width_clone = width_tb.clone();
+        width_tb.set_hook(Box::new(move |_ctx, is_final, text| {
+            if is_final {
+                let restore = match *board_size.borrow() {
+                    BoardSize::Auto => "Auto".to_string(),
+                    BoardSize::Fixed(w, _) => w.to_string(),
+                };
+                width_clone.set_text(restore);
+                return EventResponses::default();
+            }
+            let w = parse_dim(&text);
+            let h = parse_dim(&height_tb.tb.get_text());
+            let bs = match (w, h) {
+                (Some(w), Some(h)) => BoardSize::Fixed(w, h),
                 _ => BoardSize::Auto,
             };
             *board_size.borrow_mut() = bs;
@@ -142,9 +172,49 @@ pub fn build_control_bar(
                 *num_foods.borrow(),
             );
             EventResponses::default()
-        }),
-    );
-    pane.add_element(Box::new(size_dropdown.at(59, 0)));
+        }));
+    }
+
+    // Height textbox hook
+    {
+        let board_size = board_size.clone();
+        let tick_interval = tick_interval.clone();
+        let theme = theme.clone();
+        let high_score = high_score.clone();
+        let num_foods = num_foods.clone();
+        let width_tb = width_tb.clone();
+        let height_clone = height_tb.clone();
+        height_tb.set_hook(Box::new(move |_ctx, is_final, text| {
+            if is_final {
+                let restore = match *board_size.borrow() {
+                    BoardSize::Auto => "Auto".to_string(),
+                    BoardSize::Fixed(_, h) => h.to_string(),
+                };
+                height_clone.set_text(restore);
+                return EventResponses::default();
+            }
+            let h = parse_dim(&text);
+            let w = parse_dim(&width_tb.tb.get_text());
+            let bs = match (w, h) {
+                (Some(w), Some(h)) => BoardSize::Fixed(w, h),
+                _ => BoardSize::Auto,
+            };
+            *board_size.borrow_mut() = bs;
+            Config::save_values(
+                tick_interval.borrow().as_millis() as u64,
+                &board_size_to_str(&board_size.borrow()),
+                theme_to_str(&theme.borrow()),
+                *high_score.borrow(),
+                *num_foods.borrow(),
+            );
+            EventResponses::default()
+        }));
+    }
+
+    pane.add_element(Box::new(Label::new(ctx, "W:").at(59, 0)));
+    pane.add_element(Box::new(width_tb.at(62, 0)));
+    pane.add_element(Box::new(Label::new(ctx, "H:").at(68, 0)));
+    pane.add_element(Box::new(height_tb.at(71, 0)));
 
     // Theme dropdown
     let theme = state.theme.clone();
@@ -173,7 +243,7 @@ pub fn build_control_bar(
             EventResponses::default()
         }),
     );
-    pane.add_element(Box::new(theme_dropdown.at(74, 0)));
+    pane.add_element(Box::new(theme_dropdown.at(77, 0)));
 
     // Restart button
     let restart_btn = Button::new(ctx, "Restart").with_fn(Box::new(move |_btn, _ctx| {
@@ -182,7 +252,7 @@ pub fn build_control_bar(
         drop(fn_);
         EventResponses::default()
     }));
-    pane.add_element(Box::new(restart_btn.at(89, 0)));
+    pane.add_element(Box::new(restart_btn.at(92, 0)));
 
     // --- Row 1: Food count slider ---
 
@@ -231,5 +301,14 @@ fn theme_to_str(t: &Theme) -> &'static str {
         Theme::Classic => "Classic",
         Theme::Neon => "Neon",
         Theme::Amber => "Amber",
+    }
+}
+
+fn parse_dim(s: &str) -> Option<usize> {
+    let s = s.trim();
+    if s.eq_ignore_ascii_case("auto") {
+        None
+    } else {
+        s.parse().ok()
     }
 }
