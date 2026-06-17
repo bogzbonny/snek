@@ -444,20 +444,41 @@ impl Element for SnakeGame {
 
         let gx = border_x + 1;
         let gy = border_y + 1;
-        for y in 0..board_h {
-            for x in 0..board_w {
-                let sx = gx + x;
-                let sy = gy + y;
-                let ch = if snake[0] == (x, y) {
-                    DrawCh::new('◆', head_color.clone())
-                } else if snake.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
-                    DrawCh::new('■', body_color.clone())
-                } else if apple == (x, y) {
-                    DrawCh::new('🍎', apple_color.clone())
-                } else {
-                    DrawCh::new(' ', default_style.clone())
-                };
-                chs.push(DrawChPos::new(ch, sx as u16, sy as u16));
+        let state = *self.ctrl_state.borrow();
+        if state == GameState::Paused {
+            // Draw empty board with "- paused -" centered
+            let msg = "- paused -";
+            let msg_len = msg.len();
+            let start_x = board_w.saturating_sub(msg_len) / 2;
+            let mid_y = board_h / 2;
+            for y in 0..board_h {
+                for x in 0..board_w {
+                    let sx = gx + x;
+                    let sy = gy + y;
+                    let ch = if y == mid_y && x >= start_x && x < start_x + msg_len {
+                        DrawCh::new(msg.as_bytes()[x - start_x] as char, default_style.clone())
+                    } else {
+                        DrawCh::new(' ', default_style.clone())
+                    };
+                    chs.push(DrawChPos::new(ch, sx as u16, sy as u16));
+                }
+            }
+        } else {
+            for y in 0..board_h {
+                for x in 0..board_w {
+                    let sx = gx + x;
+                    let sy = gy + y;
+                    let ch = if snake[0] == (x, y) {
+                        DrawCh::new('◆', head_color.clone())
+                    } else if snake.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
+                        DrawCh::new('■', body_color.clone())
+                    } else if apple == (x, y) {
+                        DrawCh::new('🍎', apple_color.clone())
+                    } else {
+                        DrawCh::new(' ', default_style.clone())
+                    };
+                    chs.push(DrawChPos::new(ch, sx as u16, sy as u16));
+                }
             }
         }
 
