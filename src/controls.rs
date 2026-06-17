@@ -195,11 +195,6 @@ pub fn build_control_bar(
     // --- Row 2: Apple count slider ---
     let row2 = HorizontalStackFocuser::new(ctx);
 
-    // Spacer to align below speed slider
-    for _ in 0..7 {
-        row2.push(Box::new(spacer(ctx)));
-    }
-
     row2.push(Box::new(Label::new(ctx, "Apples")));
     row2.push(Box::new(spacer(ctx)));
 
