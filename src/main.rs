@@ -14,7 +14,7 @@ use game::SnakeGame;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut tui, ctx) = Tui::new()?;
 
-    let state = ControlState::new();
+    let state = ControlState::new(&ctx);
     let tick_interval = state.tick_interval.clone();
 
     let game = SnakeGame::new(&ctx, &state, 60, 30);
@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let restart_game = game.clone();
 
     let restart_fn = Rc::new(RefCell::new(move || restart_game.restart()));
-    let control_bar = build_control_bar(&ctx, state, restart_fn);
+    let control_bar = build_control_bar(&ctx, &state, restart_fn);
 
     // Layout: VerticalStack — game (~80%) then control bar (~20%)
     let stack = VerticalStack::new(&ctx);

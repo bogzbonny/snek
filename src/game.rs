@@ -5,7 +5,7 @@ use rand::Rng;
 use crossterm::event::KeyEvent;
 use yeehaw::{
     Attributes, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element, ElementID,
-    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, ReceivableEvent,
+    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Label, Pane, ReceivableEvent,
     ReceivableEvents, Ref, Rc, Style,
 };
 
@@ -82,9 +82,9 @@ pub struct SnakeGame {
     ctrl_score: Rc<RefCell<usize>>,
     ctrl_high_score: Rc<RefCell<usize>>,
     ctrl_state: Rc<RefCell<GameState>>,
-    ctrl_score_label: Rc<RefCell<String>>,
-    ctrl_high_score_label: Rc<RefCell<String>>,
-    ctrl_status_label: Rc<RefCell<String>>,
+    ctrl_score_label: Rc<Label>,
+    ctrl_high_score_label: Rc<Label>,
+    ctrl_status_label: Rc<Label>,
     // Last-known board dimensions for Auto mode
     last_board_w: RefCell<usize>,
     last_board_h: RefCell<usize>,
@@ -208,12 +208,12 @@ impl SnakeGame {
     }
 
     fn sync_status_label(&self) {
-        let label = match *self.ctrl_state.borrow() {
+        let text: String = match *self.ctrl_state.borrow() {
             GameState::Running => "Running".into(),
             GameState::Paused => "Paused".into(),
             GameState::GameOver => "Game Over".into(),
         };
-        *self.ctrl_status_label.borrow_mut() = label;
+        self.ctrl_status_label.set_text(text);
     }
 }
 
@@ -512,8 +512,8 @@ impl SnakeGame {
     fn sync_score_labels(&self) {
         let score = *self.ctrl_score.borrow();
         let high = *self.ctrl_high_score.borrow();
-        *self.ctrl_score_label.borrow_mut() = format!("Score: {}", score);
-        *self.ctrl_high_score_label.borrow_mut() = format!("Best: {}", high);
+        self.ctrl_score_label.set_text(format!("Score: {}", score));
+        self.ctrl_high_score_label.set_text(format!("Best: {}", high));
     }
 
     pub fn tick(&self, _ctx: &Context) {
@@ -541,10 +541,11 @@ impl SnakeGame {
 
         let (nx, ny) = match dir {
             Direction::Up => (hx, hy.wrapping_sub(1)),
-            Direction::Down => (hx, hy + 1),
+            Direction::Down => (hx, hy.saturating_add(1)),
             Direction::Left => (hx.wrapping_sub(1), hy),
-            Direction::Right => (hx + 1, hy),
+            Direction::Right => (hx.saturating_add(1), hy),
         };
+        let eating = (nx, ny) == apple;
 
         if nx >= bw || ny >= bh {
             drop(snake);
@@ -553,7 +554,9 @@ impl SnakeGame {
             return;
         }
 
-        if snake.iter().any(|&(sx, sy)| sx == nx && sy == ny) {
+        // Exclude tail from collision check when not eating: the tail will move away.
+        let segments_to_check = if eating { snake.len() } else { snake.len().saturating_sub(1) };
+        if snake.iter().take(segments_to_check).any(|&(sx, sy)| sx == nx && sy == ny) {
             drop(snake);
             *self.ctrl_state.borrow_mut() = GameState::GameOver;
             self.sync_status_label();
