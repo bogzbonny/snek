@@ -21,6 +21,8 @@ pub struct ControlState {
     pub state: Rc<RefCell<GameState>>,
     pub num_foods: Rc<RefCell<usize>>,
     pub no_walls: Rc<RefCell<bool>>,
+    pub score_display: Option<SingleLineTextBox>,
+    pub best_display: Option<SingleLineTextBox>,
 }
 
 impl ControlState {
@@ -61,6 +63,8 @@ impl ControlState {
             state: Rc::new(RefCell::new(GameState::Paused)),
             num_foods: Rc::new(RefCell::new(num_foods)),
             no_walls: Rc::new(RefCell::new(cfg.no_walls)),
+            score_display: None,
+            best_display: None,
         }
     }
 }
@@ -70,7 +74,7 @@ impl ControlState {
 /// `restart_fn` is called by the Restart button to reset the game.
 pub fn build_control_bar(
     ctx: &Context,
-    state: &ControlState,
+    state: &mut ControlState,
     restart_fn: Rc<RefCell<dyn Fn()>>,
 ) -> Box<dyn Element> {
     let pane = ParentPane::new(ctx, "control_bar");
@@ -276,6 +280,31 @@ pub fn build_control_bar(
         EventResponses::default()
     }));
     pane.add_element(Box::new(no_walls_cb.at(68, 1)));
+
+    // --- Row 2: Score and Best ---
+    pane.add_element(Box::new(Label::new(ctx, "Score:").at(0, 2)));
+
+    let score_tb = SingleLineTextBox::new(ctx);
+    score_tb.set_text((*state.score.borrow()).to_string());
+    {
+        let mut loc = score_tb.get_dyn_location_set().clone();
+        loc.set_dyn_width(DynVal::new_fixed(6));
+        score_tb.set_dyn_location_set(loc);
+    }
+    state.score_display = Some(score_tb.clone());
+    pane.add_element(Box::new(score_tb.at(8, 2)));
+
+    pane.add_element(Box::new(Label::new(ctx, "Best:").at(20, 2)));
+
+    let best_tb = SingleLineTextBox::new(ctx);
+    best_tb.set_text((*state.high_score.borrow()).to_string());
+    {
+        let mut loc = best_tb.get_dyn_location_set().clone();
+        loc.set_dyn_width(DynVal::new_fixed(6));
+        best_tb.set_dyn_location_set(loc);
+    }
+    state.best_display = Some(best_tb.clone());
+    pane.add_element(Box::new(best_tb.at(26, 2)));
 
     Box::new(pane)
 }

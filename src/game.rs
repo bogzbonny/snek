@@ -7,7 +7,7 @@ use rand::Rng;
 use yeehaw::{
     Attributes, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element, ElementID,
     Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, Rc, ReceivableEvent,
-    ReceivableEvents, Ref, Style,
+    ReceivableEvents, Ref, SingleLineTextBox, Style,
 };
 
 use crate::config::Config;
@@ -101,6 +101,9 @@ pub struct SnekGame {
     ctrl_state: Rc<RefCell<GameState>>,
     ctrl_num_foods: Rc<RefCell<usize>>,
     ctrl_no_walls: Rc<RefCell<bool>>,
+    // Display textboxes for score/best in control bar
+    ctrl_score_display: Option<SingleLineTextBox>,
+    ctrl_best_display: Option<SingleLineTextBox>,
     // Last-known board dimensions for Auto mode (Rc so clones share state with original)
     last_board_w: Rc<RefCell<usize>>,
     last_board_h: Rc<RefCell<usize>>,
@@ -157,6 +160,8 @@ impl SnekGame {
             ctrl_state: ctrl.state.clone(),
             ctrl_num_foods: ctrl.num_foods.clone(),
             ctrl_no_walls: ctrl.no_walls.clone(),
+            ctrl_score_display: ctrl.score_display.clone(),
+            ctrl_best_display: ctrl.best_display.clone(),
             last_board_w: Rc::new(RefCell::new(0)),
             last_board_h: Rc::new(RefCell::new(0)),
             board_initialized: Rc::new(RefCell::new(false)),
@@ -484,20 +489,12 @@ impl Element for SnekGame {
             }
         }
 
-        // Render score line below the board (last row of the pane).
-        let status_y = pane_h - 1;
-        if status_y > 0 {
-            let score = *self.ctrl_score.borrow();
-            let high = *self.ctrl_high_score.borrow();
-            let status_str = format!("Score: {}  Best: {}", score, high);
-            let start_x = pane_w.saturating_sub(status_str.len()) / 2;
-            for (i, ch) in status_str.chars().enumerate() {
-                chs.push(DrawChPos::new(
-                    DrawCh::new(ch, default_style.clone()),
-                    (start_x + i) as u16,
-                    status_y as u16,
-                ));
-            }
+        // Update score/best display in control bar
+        if let Some(ref display) = self.ctrl_score_display {
+            display.set_text((*self.ctrl_score.borrow()).to_string());
+        }
+        if let Some(ref display) = self.ctrl_best_display {
+            display.set_text((*self.ctrl_high_score.borrow()).to_string());
         }
 
         updates.push(DrawUpdate::update(chs));
