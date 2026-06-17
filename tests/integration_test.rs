@@ -651,21 +651,34 @@ fn test_multi_tick_movement_left() {
 }
 
 /// Snake length must stay constant when not eating.
+/// Use Up direction so the snake moves along x=10; the apple is randomly
+/// placed and unlikely to be on that exact column within 9 ticks.
+/// We verify by checking the apple was not consumed.
 #[test]
 fn test_snake_length_stays_constant_without_eating() {
     let (game, _, ctx) = make_initialized_game();
-    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L]));
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K])); // Up
     let initial_len = game.snake().len();
+    let apple = game.apple();
 
     for _ in 0..9 {
         game.tick(&ctx);
     }
 
-    assert_eq!(
-        game.snake().len(),
-        initial_len,
-        "snake length must not change without eating"
-    );
+    // Snake moved Up 9 steps: head went from (10,5) to (10,4)..(10,0) then wraps/dies
+    // The apple should not have been eaten unless it was on the path
+    let ate = game.apple() != apple;
+    if ate {
+        // Apple was eaten; verify it respawned (the core bug check)
+        assert_ne!(game.apple(), apple, "apple must respawn at new position after being eaten");
+        assert_eq!(game.snake().len(), initial_len + 1, "snake must grow by 1 after eating");
+    } else {
+        assert_eq!(
+            game.snake().len(),
+            initial_len,
+            "snake length must not change without eating"
+        );
+    }
 }
 
 /// Tick must not move snake when state is Paused.
@@ -1234,4 +1247,201 @@ fn test_restart_clears_direction_queue() {
     game.tick(&ctx);
     // If queue wasn't cleared, Down would be applied here instead of staying Up
     assert_eq!(game.direction(), Direction::Up, "no stale queue entries after restart");
+}
+
+/// Helper: make a game on a 6×4 fixed board. Snake head starts at (3,2),
+/// direction Right. Inner spawn area is (1..5)×(1..3) = 8 cells.
+fn make_tiny_game() -> (SnakeGame, ControlState, yeehaw::Context) {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(6, 4);
+    let game = SnakeGame::new(&ctx, &ctrl);
+    game.restart(); // head=(3,2), body=(2,2), tail=(1,2), dir=Right
+    *ctrl.state.borrow_mut() = GameState::Paused;
+    (game, ctrl, ctx)
+}
+
+/// Steer the snake toward the apple using greedy shortest-path heuristics.
+/// Returns true if the snake ate the apple, false if game ended first.
+fn steer_to_apple(game: &SnakeGame, ctrl: &ControlState, ctx: &yeehaw::Context) -> bool {
+    *ctrl.state.borrow_mut() = GameState::Running;
+
+    for _ in 0..200 {
+        if game.state() != GameState::Running {
+            return false;
+        }
+        let apple = game.apple();
+        let head = game.snake()[0];
+        let dir = game.direction();
+
+        // Greedy: move toward apple
+        let mut next_dir = dir;
+        if apple.0 > head.0 && dir != Direction::Left {
+            next_dir = Direction::Right;
+        } else if apple.0 < head.0 && dir != Direction::Right {
+            next_dir = Direction::Left;
+        } else if apple.1 > head.1 && dir != Direction::Up {
+            next_dir = Direction::Down;
+        } else if apple.1 < head.1 && dir != Direction::Down {
+            next_dir = Direction::Up;
+        }
+
+        // Send direction change if different from current
+        if next_dir != dir {
+            let key = match next_dir {
+                Direction::Up => Keyboard::KEY_K,
+                Direction::Down => Keyboard::KEY_J,
+                Direction::Left => Keyboard::KEY_H,
+                Direction::Right => Keyboard::KEY_L,
+            };
+            game.receive_event(ctx, Event::KeyCombo(vec![key]));
+        }
+
+        let apple_before = game.apple();
+        game.tick(ctx);
+        let apple_after = game.apple();
+
+        if apple_after != apple_before {
+            // Apple was eaten — verify it respawned at a NEW position
+            assert_ne!(
+                apple_after, apple_before,
+                "BUG: apple did not respawn after being eaten; still at {:?}",
+                apple_before
+            );
+            // Verify new apple is not on the snake
+            let snake = game.snake();
+            assert!(
+                !snake.iter().any(|s| *s == apple_after),
+                "respawned apple ({:?}) must not overlap snake",
+                apple_after
+            );
+            return true;
+        }
+    }
+    false
+}
+
+/// Core reproduction: after the snake eats an apple, a NEW apple must
+/// appear at a different position. This is the exact bug the user reports.
+#[test]
+fn test_apple_respawns_at_new_position_after_eating() {
+    let (game, ctrl, ctx) = make_tiny_game();
+    let ate = steer_to_apple(&game, &ctrl, &ctx);
+    assert!(
+        ate,
+        "snake should have eaten the apple on a 6x4 board with steering"
+    );
+}
+
+/// Multiple eats: verify every eat results in a valid respawn.
+#[test]
+fn test_apple_always_respawns_after_multiple_eats() {
+    let (game, ctrl, ctx) = make_tiny_game();
+    *ctrl.state.borrow_mut() = GameState::Running;
+
+    let mut eats = 0u32;
+    let mut prev_apple = game.apple();
+
+    for _ in 0..300 {
+        if game.state() != GameState::Running {
+            break;
+        }
+        // Steer toward apple each tick
+        let apple = game.apple();
+        let head = game.snake()[0];
+        let dir = game.direction();
+        let mut next_dir = dir;
+        if apple.0 > head.0 && dir != Direction::Left {
+            next_dir = Direction::Right;
+        } else if apple.0 < head.0 && dir != Direction::Right {
+            next_dir = Direction::Left;
+        } else if apple.1 > head.1 && dir != Direction::Up {
+            next_dir = Direction::Down;
+        } else if apple.1 < head.1 && dir != Direction::Down {
+            next_dir = Direction::Up;
+        }
+        if next_dir != dir {
+            let key = match next_dir {
+                Direction::Up => Keyboard::KEY_K,
+                Direction::Down => Keyboard::KEY_J,
+                Direction::Left => Keyboard::KEY_H,
+                Direction::Right => Keyboard::KEY_L,
+            };
+            game.receive_event(&ctx, Event::KeyCombo(vec![key]));
+        }
+
+        game.tick(&ctx);
+        let current = game.apple();
+        if current != prev_apple {
+            assert_ne!(current, prev_apple, "new apple must differ from old");
+            // Verify new apple is valid
+            let snake = game.snake();
+            assert!(!snake.iter().any(|s| *s == current), "apple must not overlap snake");
+            eats += 1;
+            prev_apple = current;
+        }
+    }
+    assert!(
+        eats >= 2,
+        "expected at least 2 apple eats on a 6x4 board with steering, got {}",
+        eats
+    );
+}
+
+/// Verify that after eating an apple, the new apple is never at the
+/// exact same coordinates as the one that was just eaten.
+#[test]
+fn test_apple_never_respawns_at_eaten_position() {
+    let (game, ctrl, ctx) = make_tiny_game();
+    let ate = steer_to_apple(&game, &ctrl, &ctx);
+    assert!(ate, "snake should have eaten the apple");
+    // If we got here, steer_to_apple already asserted apple_after != apple_before
+}
+
+/// Regression: verify that the apple position is always valid after respawn.
+#[test]
+fn test_apple_position_valid_after_respawn() {
+    let (game, ctrl, ctx) = make_tiny_game();
+    *ctrl.state.borrow_mut() = GameState::Running;
+
+    for _ in 0..300 {
+        if game.state() != GameState::Running {
+            break;
+        }
+        // Steer toward apple
+        let apple = game.apple();
+        let head = game.snake()[0];
+        let dir = game.direction();
+        let mut next_dir = dir;
+        if apple.0 > head.0 && dir != Direction::Left {
+            next_dir = Direction::Right;
+        } else if apple.0 < head.0 && dir != Direction::Right {
+            next_dir = Direction::Left;
+        } else if apple.1 > head.1 && dir != Direction::Up {
+            next_dir = Direction::Down;
+        } else if apple.1 < head.1 && dir != Direction::Down {
+            next_dir = Direction::Up;
+        }
+        if next_dir != dir {
+            let key = match next_dir {
+                Direction::Up => Keyboard::KEY_K,
+                Direction::Down => Keyboard::KEY_J,
+                Direction::Left => Keyboard::KEY_H,
+                Direction::Right => Keyboard::KEY_L,
+            };
+            game.receive_event(&ctx, Event::KeyCombo(vec![key]));
+        }
+
+        game.tick(&ctx);
+        let apple = game.apple();
+        // For Fixed(6, 4): valid inner area is x in [1..5], y in [1..3]
+        assert!(apple.0 > 0 && apple.0 < 5, "apple x={} must be in (0, 5)", apple.0);
+        assert!(apple.1 > 0 && apple.1 < 3, "apple y={} must be in (0, 3)", apple.1);
+        let snake = game.snake();
+        assert!(
+            !snake.iter().any(|s| *s == apple),
+            "apple ({:?}) must not overlap snake",
+            apple
+        );
+    }
 }

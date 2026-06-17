@@ -363,8 +363,17 @@ impl Element for SnakeGame {
             BoardSize::Auto => {
                 let w = pane_w.saturating_sub(2);
                 let h = pane_h.saturating_sub(2);
-                *self.last_board_w.borrow_mut() = w;
-                *self.last_board_h.borrow_mut() = h;
+                // Only cache dimensions when the inner spawn area is large enough
+                // for spawn_apple to work (inner_w * inner_h >= 4).  This prevents
+                // layout-probe draws with tiny DrawRegions from corrupting the
+                // cached size that tick() relies on, which would cause spawn_apple
+                // to early-return and leave the apple at its stale eaten position.
+                let inner_w = w.saturating_sub(2);
+                let inner_h = h.saturating_sub(2);
+                if inner_w.saturating_mul(inner_h) >= 4 {
+                    *self.last_board_w.borrow_mut() = w;
+                    *self.last_board_h.borrow_mut() = h;
+                }
                 (w, h, 0, 0)
             }
             BoardSize::Fixed(w, h) => {
