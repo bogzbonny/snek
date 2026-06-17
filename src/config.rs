@@ -8,6 +8,8 @@ pub struct Config {
     pub board_size: String,
     pub theme: String,
     pub high_score: usize,
+    #[serde(default)]
+    pub num_apples: usize,
 }
 
 impl Config {
@@ -17,6 +19,7 @@ impl Config {
             board_size: "Auto".to_string(),
             theme: "Classic".to_string(),
             high_score: 0,
+            num_apples: 1,
         }
     }
 
@@ -41,12 +44,13 @@ impl Config {
     }
 
     /// Save config from individual values.
-    pub fn save_values(speed_ms: u64, board_size: &str, theme: &str, high_score: usize) {
+    pub fn save_values(speed_ms: u64, board_size: &str, theme: &str, high_score: usize, num_apples: usize) {
         Self {
             speed_ms,
             board_size: board_size.to_string(),
             theme: theme.to_string(),
             high_score,
+            num_apples,
         }
         .save();
     }

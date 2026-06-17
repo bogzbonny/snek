@@ -74,7 +74,7 @@ pub struct SnakeGame {
     pane: Pane,
     snake: Rc<RefCell<Vec<(usize, usize)>>>,
     direction: Rc<RefCell<Direction>>,
-    apple: Rc<RefCell<(usize, usize)>>,
+    apples: Rc<RefCell<Vec<(usize, usize)>>>,
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
     ctrl_board_size: Rc<RefCell<BoardSize>>,
@@ -82,6 +82,7 @@ pub struct SnakeGame {
     ctrl_score: Rc<RefCell<usize>>,
     ctrl_high_score: Rc<RefCell<usize>>,
     ctrl_state: Rc<RefCell<GameState>>,
+    ctrl_num_apples: Rc<RefCell<usize>>,
     // Last-known board dimensions for Auto mode (Rc so clones share state with original)
     last_board_w: Rc<RefCell<usize>>,
     last_board_h: Rc<RefCell<usize>>,
@@ -129,7 +130,7 @@ impl SnakeGame {
             pane,
             snake: Rc::new(RefCell::new(Vec::new())),
             direction: Rc::new(RefCell::new(Direction::Right)),
-            apple: Rc::new(RefCell::new((0, 0))),
+            apples: Rc::new(RefCell::new(Vec::new())),
             // Shared state
             ctrl_tick_interval: ctrl.tick_interval.clone(),
             ctrl_board_size: ctrl.board_size.clone(),
@@ -137,6 +138,7 @@ impl SnakeGame {
             ctrl_score: ctrl.score.clone(),
             ctrl_high_score: ctrl.high_score.clone(),
             ctrl_state: ctrl.state.clone(),
+            ctrl_num_apples: ctrl.num_apples.clone(),
             last_board_w: Rc::new(RefCell::new(0)),
             last_board_h: Rc::new(RefCell::new(0)),
             board_initialized: Rc::new(RefCell::new(false)),
@@ -159,7 +161,11 @@ impl SnakeGame {
     }
 
     pub fn apple(&self) -> (usize, usize) {
-        *self.apple.borrow()
+        *self.apples.borrow().first().unwrap_or(&(0, 0))
+    }
+
+    pub fn apples(&self) -> Vec<(usize, usize)> {
+        self.apples.borrow().clone()
     }
 
     pub fn score(&self) -> usize {
@@ -220,7 +226,7 @@ impl SnakeGame {
         *self.snake.borrow_mut() = snake;
         *self.direction.borrow_mut() = Direction::Right;
         *self.ctrl_score.borrow_mut() = 0;
-        self.spawn_apple(bw, bh);
+        self.spawn_apple(bw, bh, None);
         *self.board_initialized.borrow_mut() = true;
     }
 }
@@ -396,7 +402,7 @@ impl Element for SnakeGame {
         let mut chs = Vec::new();
         let theme = *self.ctrl_theme.borrow();
         let snake = self.snake.borrow();
-        let apple = *self.apple.borrow();
+        let apples = self.apples.borrow();
 
         let head_color = fg_style(theme.head_color());
         let body_color = fg_style(theme.body_color());
@@ -502,7 +508,7 @@ impl Element for SnakeGame {
                         DrawCh::new('◆', head_color.clone())
                     } else if snake.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
                         DrawCh::new('■', body_color.clone())
-                    } else if apple == (x, y) {
+                    } else if apples.iter().any(|&(ax, ay)| ax == x && ay == y) {
                         DrawCh::new('🍎', apple_color.clone())
                     } else {
                         DrawCh::new(' ', default_style.clone())
@@ -635,32 +641,72 @@ impl SnakeGame {
         }
     }
 
-    fn spawn_apple(&self, bw: usize, bh: usize) {
-        // Inner spawn area (border excluded) must have room for at least one apple
-        // beyond the initial 3-segment snake. Requires inner_w * inner_h >= 4.
+    /// Test helper: replace all apples with a single apple at the given position.
+    pub fn spawn_apple_at(&self, x: usize, y: usize) {
+        self.apples.borrow_mut().clear();
+        self.apples.borrow_mut().push((x, y));
+    }
+
+    /// Spawn apples to reach target count. If `eaten_at` is Some, that apple
+    /// is removed first and replaced. If no free cell exists for replacement,
+    /// the eaten apple stays (preserves valid apple position for tests).
+    fn spawn_apple(&self, bw: usize, bh: usize, eaten_at: Option<(usize, usize)>) {
         let inner_w = bw.saturating_sub(2);
         let inner_h = bh.saturating_sub(2);
         if inner_w * inner_h < 4 {
             return;
         }
-        let snake = self.snake.borrow();
-        // Enumerate free cells in the inner spawn area and pick one at
-        // random.  O(inner_cells * snake_len) but bounded and guaranteed
-        // to find a placement when one exists — avoids both the
-        // infinite-loop risk of pure random sampling and the stale-apple
-        // bug of an early `>=` return guard.
-        let free: Vec<_> = (1..=inner_w)
-            .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
-            .filter(|&(x, y)| !snake.iter().any(|&(sx, sy)| sx == x && sy == y))
-            .collect();
-
-        if free.is_empty() {
-            // Snake fills the entire inner area — leave apple at its current
-            // position (the cell just eaten, hidden behind the snake head).
+        let target = *self.ctrl_num_apples.borrow();
+        let mut apples = self.apples.borrow_mut();
+        if target == 0 {
+            apples.clear();
             return;
         }
-        let pos = free[rand::thread_rng().gen_range(0..free.len())];
-        *self.apple.borrow_mut() = pos;
+
+        let snake = self.snake.borrow();
+
+        if let Some(eaten) = eaten_at {
+            // Check free cells assuming eaten apple will be freed
+            // Exclude eaten apple from occupied (it will be freed), but keep
+            // snake cells — the head is at `eaten` and must remain occupied.
+            let occupied: std::collections::HashSet<_> = snake.iter()
+                .chain(apples.iter().filter(|p| **p != eaten))
+                .cloned()
+                .collect();
+            let free: Vec<_> = (1..=inner_w)
+                .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
+                .filter(|p| !occupied.contains(p))
+                .collect();
+            drop(snake);
+            if free.is_empty() {
+                // Nowhere to respawn — eaten apple stays
+                return;
+            }
+            // Remove eaten apple and spawn replacement
+            apples.retain(|p| *p != eaten);
+            let mut rng = rand::thread_rng();
+            let idx = rng.gen_range(0..free.len());
+            apples.push(free[idx]);
+        } else {
+            // Initial spawn: add apples to reach target
+            let occupied: std::collections::HashSet<_> = snake.iter().chain(apples.iter()).cloned().collect();
+            let free: Vec<_> = (1..=inner_w)
+                .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
+                .filter(|p| !occupied.contains(p))
+                .collect();
+            drop(snake);
+            let mut rng = rand::thread_rng();
+            let needed = target.saturating_sub(apples.len());
+            let mut available = free;
+            for _ in 0..needed {
+                if available.is_empty() {
+                    break;
+                }
+                let idx = rng.gen_range(0..available.len());
+                let pos = available.remove(idx);
+                apples.push(pos);
+            }
+        }
     }
 
     pub fn restart(&self) {
@@ -718,7 +764,6 @@ impl SnakeGame {
             BoardSize::Fixed(w, h) => (w, h),
             BoardSize::Auto => (*self.last_board_w.borrow(), *self.last_board_h.borrow()),
         };
-        let apple = *self.apple.borrow();
         let mut snake = self.snake.borrow_mut();
         let (hx, hy) = snake[0];
 
@@ -729,7 +774,11 @@ impl SnakeGame {
             Direction::Left => (hx.wrapping_sub(1), hy),
             Direction::Right => (hx.wrapping_add(1), hy),
         };
-        let eating = (nx, ny) == apple;
+        // Compute eating flag and drop apples borrow immediately
+        let eating = {
+            let apples = self.apples.borrow();
+            apples.iter().any(|&(ax, ay)| ax == nx && ay == ny)
+        };
 
         if nx >= bw || ny >= bh {
             drop(snake);
@@ -753,7 +802,7 @@ impl SnakeGame {
             return;
         }
 
-        if (nx, ny) == apple {
+        if eating {
             snake.insert(0, (nx, ny));
 
             let new_score = {
@@ -762,7 +811,6 @@ impl SnakeGame {
             };
             if new_score > *self.ctrl_high_score.borrow() {
                 *self.ctrl_high_score.borrow_mut() = new_score;
-                // Save config when highscore changes
                 let speed_ms = self.ctrl_tick_interval.borrow().as_millis() as u64;
                 let board_size = match *self.ctrl_board_size.borrow() {
                     BoardSize::Auto => "Auto".to_string(),
@@ -773,11 +821,13 @@ impl SnakeGame {
                     Theme::Neon => "Neon",
                     Theme::Amber => "Amber",
                 };
-                Config::save_values(speed_ms, &board_size, theme, new_score);
+                let num_apples = *self.ctrl_num_apples.borrow();
+                Config::save_values(speed_ms, &board_size, theme, new_score, num_apples);
             }
 
             drop(snake);
-            self.spawn_apple(bw, bh);
+            // Respawn: replace eaten apple. If no free cells, eaten apple stays.
+            self.spawn_apple(bw, bh, Some((nx, ny)));
         } else {
             snake.pop();
             snake.insert(0, (nx, ny));
