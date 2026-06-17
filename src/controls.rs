@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use yeehaw::{
     Button, Context, DrawRegion, DrawUpdate, DropdownList, Element, ElementID, Event,
-    EventResponse, EventResponses, HorizontalStackFocuser, Label, Parent, ReceivableEvents,
+    EventResponses, HorizontalStackFocuser, Label, Parent, ReceivableEvents,
     Ref, Slider,
 };
 
@@ -251,12 +251,6 @@ pub fn build_control_bar(
         EventResponses::default()
     }));
     stack.push(Box::new(restart_btn));
-
-    // --- Quit button ---
-    let quit_btn = Button::new(ctx, "Quit").with_fn(Box::new(move |_btn, _ctx| {
-        EventResponses::from(EventResponse::Quit)
-    }));
-    stack.push(Box::new(quit_btn));
 
     Box::new(stack)
 }
