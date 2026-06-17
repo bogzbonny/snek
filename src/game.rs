@@ -241,7 +241,7 @@ impl Element for SnakeGame {
         vec![self.rec_evs.clone()]
     }
 
-    fn receive_event(&self, _ctx: &Context, ev: Event) -> (bool, EventResponses) {
+    fn receive_event(&self, ctx: &Context, ev: Event) -> (bool, EventResponses) {
         let state = *self.ctrl_state.borrow();
 
         let is_dir_key = |k: KeyEvent| -> bool {
@@ -291,6 +291,10 @@ impl Element for SnakeGame {
                     }
                     *self.ctrl_state.borrow_mut() = GameState::Running;
                     self.sync_status_label();
+                    // Move snake immediately on first direction key press.
+                    if is_dir_key(key) {
+                        self.tick(ctx);
+                    }
                 }
             }
             GameState::Running => {
