@@ -1330,6 +1330,13 @@ fn steer_to_apple(game: &SnakeGame, ctrl: &ControlState, ctx: &yeehaw::Context) 
             next_dir = Direction::Down;
         } else if apple.1 < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
+        } else {
+            // Cannot move toward apple directly (would need to reverse).
+            // Turn 90° to reposition, then approach from a different axis.
+            next_dir = match dir {
+                Direction::Up | Direction::Down => Direction::Right,
+                Direction::Left | Direction::Right => Direction::Up,
+            };
         }
 
         // Send direction change if different from current
@@ -1405,6 +1412,13 @@ fn test_apple_always_respawns_after_multiple_eats() {
             next_dir = Direction::Down;
         } else if apple.1 < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
+        } else {
+            // Cannot move toward apple directly (would need to reverse).
+            // Turn 90° to reposition, then approach from a different axis.
+            next_dir = match dir {
+                Direction::Up | Direction::Down => Direction::Right,
+                Direction::Left | Direction::Right => Direction::Up,
+            };
         }
         if next_dir != dir {
             let key = match next_dir {

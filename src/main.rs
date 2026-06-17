@@ -7,9 +7,9 @@ use yeehaw::{DynVal, Element, ParentPane, Tui, VerticalStack};
 mod controls;
 mod game;
 
-use snek::config;
 use controls::{build_control_bar, ControlState};
 use game::SnakeGame;
+use snek::config;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,9 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let restart_fn = Rc::new(RefCell::new(move || restart_game.restart()));
     let control_bar = build_control_bar(&ctx, &state, restart_fn);
 
-    // Layout: VerticalStack — game (~80%) then control bar (~20%)
     let stack = VerticalStack::new(&ctx);
-
     {
         let mut loc = game.get_dyn_location_set().clone();
         loc.set_dyn_height(DynVal::new_flex(1.0));
@@ -67,5 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    ls.run_until(tui.run(Box::new(root))).await.map_err(Into::into)
+    ls.run_until(tui.run(Box::new(root)))
+        .await
+        .map_err(Into::into)
 }
