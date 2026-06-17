@@ -555,14 +555,14 @@ impl SnakeGame {
     }
 
     fn spawn_apple(&self, bw: usize, bh: usize) {
-        // Board must be at least 3×3 to have an inner spawn area (border excluded).
-        if bw < 3 || bh < 3 {
+        // Inner spawn area (border excluded) must have room for at least one apple
+        // beyond the initial 3-segment snake. Requires inner_w * inner_h >= 4.
+        let inner_w = bw.saturating_sub(2);
+        let inner_h = bh.saturating_sub(2);
+        if inner_w * inner_h < 4 {
             return;
         }
         let snake = self.snake.borrow();
-        // Count snake segments within the inner area to guard against infinite loop.
-        let inner_w = bw - 2;
-        let inner_h = bh - 2;
         let occupied = snake
             .iter()
             .filter(|&&(sx, sy)| sx > 0 && sx < bw - 1 && sy > 0 && sy < bh - 1)

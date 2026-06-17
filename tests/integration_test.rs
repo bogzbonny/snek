@@ -975,6 +975,147 @@ fn test_apple_not_on_border_small_board() {
     }
 }
 
+/// Explicitly verify all four corners are never occupied by an apple.
+#[test]
+fn test_apple_not_in_any_corner() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+
+    let corners = [(0, 0), (19, 0), (0, 9), (19, 9)];
+    for i in 0..500 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let apple = game.apple();
+        for (ci, corner) in corners.iter().enumerate() {
+            assert_ne!(
+                apple, *corner,
+                "restart {}: apple must not be at corner {} ({:?})",
+                i, ci, corner
+            );
+        }
+    }
+}
+
+/// Verify apple never spawns on the left border (x=0) across many iterations.
+#[test]
+fn test_apple_not_on_left_border() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+
+    for i in 0..500 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let (ax, ay) = game.apple();
+        assert!(
+            ax != 0,
+            "restart {}: apple x={} must not be on left border (x=0)",
+            i, ax
+        );
+        // Also verify y is valid
+        assert!(ay > 0 && ay < 10, "restart {}: apple y={} out of bounds", i, ay);
+    }
+}
+
+/// Verify apple never spawns on the right border (x=bw-1) across many iterations.
+#[test]
+fn test_apple_not_on_right_border() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+
+    for i in 0..500 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let (ax, ay) = game.apple();
+        assert!(
+            ax != 19,
+            "restart {}: apple x={} must not be on right border (x=19)",
+            i, ax
+        );
+        assert!(ay > 0 && ay < 10, "restart {}: apple y={} out of bounds", i, ay);
+    }
+}
+
+/// Verify apple never spawns on the top border (y=0) across many iterations.
+#[test]
+fn test_apple_not_on_top_border() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+
+    for i in 0..500 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let (ax, ay) = game.apple();
+        assert!(
+            ay != 0,
+            "restart {}: apple y={} must not be on top border (y=0)",
+            i, ay
+        );
+        assert!(ax > 0 && ax < 20, "restart {}: apple x={} out of bounds", i, ax);
+    }
+}
+
+/// Verify apple never spawns on the bottom border (y=bh-1) across many iterations.
+#[test]
+fn test_apple_not_on_bottom_border() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+
+    for i in 0..500 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let (ax, ay) = game.apple();
+        assert!(
+            ay != 9,
+            "restart {}: apple y={} must not be on bottom border (y=9)",
+            i, ay
+        );
+        assert!(ax > 0 && ax < 20, "restart {}: apple x={} out of bounds", i, ax);
+    }
+}
+
+/// Test minimum viable board (4×4) — inner area 2×2, enough for snake + apple.
+#[test]
+fn test_apple_on_minimum_board() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(4, 4);
+
+    for i in 0..100 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let apple = game.apple();
+        assert!(
+            !is_on_border(apple, 4, 4),
+            "restart {}: apple {:?} must not be on border of 4×4 board",
+            i, apple
+        );
+    }
+}
+
+/// Test square board with even dimensions.
+#[test]
+fn test_apple_not_on_border_square_board() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(16, 16);
+
+    for i in 0..200 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let apple = game.apple();
+        assert!(
+            !is_on_border(apple, 16, 16),
+            "restart {}: apple {:?} must not be on border of 16×16 board",
+            i, apple
+        );
+    }
+}
+
 // ============================================================================
 // Direction queue tests — verify one direction change is applied per tick,
 // preventing rapid keypresses from causing the snake to reverse into itself.
