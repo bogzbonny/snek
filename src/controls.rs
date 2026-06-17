@@ -5,8 +5,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use yeehaw::{
-    Button, Context, DropdownList, DynVal, Element, EventResponses, HorizontalStackFocuser, Label,
-    Slider, VerticalStack,
+    Button, Context, DropdownList, DynVal, Element, EventResponses, Label, ParentPane, Slider,
 };
 
 use crate::config::Config;
@@ -71,18 +70,7 @@ impl ControlState {
     }
 }
 
-/// Fixed-width spacer label for horizontal gaps.
-fn spacer(ctx: &Context) -> Label {
-    let label = Label::new(ctx, " ");
-    {
-        let mut loc = label.get_dyn_location_set().clone();
-        loc.set_dyn_width(DynVal::new_fixed(2));
-        label.set_dyn_location_set(loc);
-    }
-    label
-}
-
-/// Build the bottom control bar as a VerticalStack with two rows.
+/// Build the bottom control bar as a single ParentPane with absolute positioning.
 ///
 /// `restart_fn` is called by the Restart button to reset the game.
 pub fn build_control_bar(
@@ -90,15 +78,14 @@ pub fn build_control_bar(
     state: &ControlState,
     restart_fn: Rc<RefCell<dyn Fn()>>,
 ) -> Box<dyn Element> {
-    let vs = VerticalStack::new(ctx);
+    let pane = ParentPane::new(ctx, "control_bar");
 
-    // --- Row 1: Speed, Board size, Theme, Restart ---
-    let row1 = HorizontalStackFocuser::new(ctx);
+    // --- Row 0: Speed, Board size, Theme, Restart ---
 
-    // Speed label + slider
-    row1.push(Box::new(Label::new(ctx, "Speed")));
-    row1.push(Box::new(spacer(ctx)));
+    // Speed label
+    pane.add_element(Box::new(Label::new(ctx, "Speed").at(0, 0)));
 
+    // Speed slider
     let speed_slider = Slider::new_basic_line(ctx);
     *speed_slider.position.borrow_mut() = 0.5;
     {
@@ -125,8 +112,7 @@ pub fn build_control_bar(
         );
         EventResponses::default()
     });
-    row1.push(Box::new(speed_slider));
-    row1.push(Box::new(spacer(ctx)));
+    pane.add_element(Box::new(speed_slider.at(7, 0)));
 
     // Board size dropdown
     let board_size = state.board_size.clone();
@@ -158,8 +144,7 @@ pub fn build_control_bar(
             EventResponses::default()
         }),
     );
-    row1.push(Box::new(size_dropdown));
-    row1.push(Box::new(spacer(ctx)));
+    pane.add_element(Box::new(size_dropdown.at(59, 0)));
 
     // Theme dropdown
     let theme = state.theme.clone();
@@ -188,8 +173,7 @@ pub fn build_control_bar(
             EventResponses::default()
         }),
     );
-    row1.push(Box::new(theme_dropdown));
-    row1.push(Box::new(spacer(ctx)));
+    pane.add_element(Box::new(theme_dropdown.at(74, 0)));
 
     // Restart button
     let restart_btn = Button::new(ctx, "Restart").with_fn(Box::new(move |_btn, _ctx| {
@@ -198,15 +182,11 @@ pub fn build_control_bar(
         drop(fn_);
         EventResponses::default()
     }));
-    row1.push(Box::new(restart_btn));
+    pane.add_element(Box::new(restart_btn.at(89, 0)));
 
-    vs.push(Box::new(row1));
+    // --- Row 1: Apple count slider ---
 
-    // --- Row 2: Apple count slider ---
-    let row2 = HorizontalStackFocuser::new(ctx);
-
-    row2.push(Box::new(Label::new(ctx, "Apples")));
-    row2.push(Box::new(spacer(ctx)));
+    pane.add_element(Box::new(Label::new(ctx, "Apples").at(0, 1)));
 
     let apple_slider = Slider::new_basic_line(ctx);
     *apple_slider.position.borrow_mut() = 0.0;
@@ -234,11 +214,9 @@ pub fn build_control_bar(
         );
         EventResponses::default()
     });
-    row2.push(Box::new(apple_slider));
+    pane.add_element(Box::new(apple_slider.at(8, 1)));
 
-    vs.push(Box::new(row2));
-
-    Box::new(vs)
+    Box::new(pane)
 }
 
 fn board_size_to_str(bs: &BoardSize) -> String {
