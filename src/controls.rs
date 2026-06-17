@@ -185,6 +185,11 @@ pub fn build_control_bar(
 
     let slider = Slider::new_basic_line(ctx);
     *slider.position.borrow_mut() = 0.5;
+    {
+        let mut loc = slider.get_dyn_location_set().clone();
+        loc.set_dyn_width(DynVal::new_fixed(50));
+        slider.set_dyn_location_set(loc);
+    }
     let tick_interval = state.tick_interval.clone();
     let board_size = state.board_size.clone();
     let theme = state.theme.clone();
