@@ -457,17 +457,22 @@ impl Element for SnakeGame {
         let gy = border_y + 1;
         let state = *self.ctrl_state.borrow();
         if state == GameState::Paused {
-            // Draw empty board with "- paused -" centered
-            let msg = "- paused -";
-            let msg_len = msg.len();
-            let start_x = board_w.saturating_sub(msg_len) / 2;
-            let mid_y = board_h / 2;
+            // Draw empty board with title and prompt centered
+            let msgs = ["- snake -", "(press an arrow key to start)"];
             for y in 0..board_h {
                 for x in 0..board_w {
                     let sx = gx + x;
                     let sy = gy + y;
-                    let ch = if y == mid_y && x >= start_x && x < start_x + msg_len {
-                        DrawCh::new(msg.as_bytes()[x - start_x] as char, default_style.clone())
+                    let ch = if let Some((line_idx, char_idx)) = msgs.iter().enumerate().find_map(|(i, m)| {
+                        let line_y = board_h / 2 - 1 + i;
+                        let start_x = board_w.saturating_sub(m.len()) / 2;
+                        if y == line_y && x >= start_x && x < start_x + m.len() {
+                            Some((i, x - start_x))
+                        } else {
+                            None
+                        }
+                    }) {
+                        DrawCh::new(msgs[line_idx].as_bytes()[char_idx] as char, default_style.clone())
                     } else {
                         DrawCh::new(' ', default_style.clone())
                     };
