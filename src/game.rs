@@ -519,17 +519,12 @@ impl Element for SnakeGame {
             }
         }
 
-        // Render status line below the board
+        // Render score line below the board
         let status_y = bb + 1;
         if status_y < pane_h {
             let score = *self.ctrl_score.borrow();
             let high = *self.ctrl_high_score.borrow();
-            let state_text = match *self.ctrl_state.borrow() {
-                GameState::Running => "Running",
-                GameState::Paused => "Paused",
-                GameState::GameOver => "Game Over",
-            };
-            let status_str = format!("Score: {}  Best: {}  {}", score, high, state_text);
+            let status_str = format!("Score: {}  Best: {}", score, high);
             let start_x = pane_w.saturating_sub(status_str.len()) / 2;
             for (i, ch) in status_str.chars().enumerate() {
                 chs.push(DrawChPos::new(
