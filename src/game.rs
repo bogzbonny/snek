@@ -226,6 +226,7 @@ impl SnakeGame {
         *self.snake.borrow_mut() = snake;
         *self.direction.borrow_mut() = Direction::Right;
         *self.ctrl_score.borrow_mut() = 0;
+        self.apples.borrow_mut().clear();
         self.spawn_apple(bw, bh, None);
         *self.board_initialized.borrow_mut() = true;
     }
@@ -685,8 +686,19 @@ impl SnakeGame {
             // Remove eaten apple and spawn replacement
             apples.retain(|p| *p != eaten);
             let mut rng = rand::thread_rng();
-            let idx = rng.gen_range(0..free.len());
-            apples.push(free[idx]);
+            let mut available = free;
+            // Replace eaten apple
+            let idx = rng.gen_range(0..available.len());
+            apples.push(available.remove(idx));
+            // Top up to target, ensuring no apple overlaps another
+            let needed = target.saturating_sub(apples.len());
+            for _ in 0..needed {
+                if available.is_empty() {
+                    break;
+                }
+                let idx = rng.gen_range(0..available.len());
+                apples.push(available.remove(idx));
+            }
         } else {
             // Initial spawn: add apples to reach target
             let occupied: std::collections::HashSet<_> = snake.iter().chain(apples.iter()).cloned().collect();
