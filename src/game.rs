@@ -49,6 +49,15 @@ pub enum FoodKind {
     RedApple,
 }
 
+impl FoodKind {
+    /// Display character for this food kind.
+    pub fn char_code(self) -> char {
+        match self {
+            FoodKind::RedApple => '🍎',
+        }
+    }
+}
+
 /// A food item the snek can consume.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Food {
@@ -56,6 +65,17 @@ pub struct Food {
     pub x: usize,
     pub y: usize,
     pub consumed: bool,
+}
+
+impl Default for Food {
+    fn default() -> Self {
+        Self {
+            kind: FoodKind::RedApple,
+            x: 0,
+            y: 0,
+            consumed: true,
+        }
+    }
 }
 
 impl Theme {
@@ -171,13 +191,12 @@ impl SnekGame {
         *self.direction.borrow()
     }
 
+    /// Return the first non-consumed food, or a sentinel if none exist.
     pub fn food(&self) -> Food {
-        *self.foods.borrow().first().unwrap_or(&Food {
-            kind: FoodKind::RedApple,
-            x: 0,
-            y: 0,
-            consumed: true,
-        })
+        *self.foods.borrow()
+            .iter()
+            .find(|f| !f.consumed)
+            .unwrap_or(&Food::default())
     }
 
     pub fn foods(&self) -> Vec<Food> {
@@ -460,8 +479,8 @@ impl Element for SnekGame {
                     DrawCh::new('◆', head_color.clone())
                 } else if snek.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
                     DrawCh::new('■', body_color.clone())
-                } else if foods.iter().any(|f| !f.consumed && f.x == x && f.y == y) {
-                    DrawCh::new('🍎', food_color.clone())
+                } else if let Some(f) = foods.iter().find(|f| !f.consumed && f.x == x && f.y == y) {
+                    DrawCh::new(f.kind.char_code(), food_color.clone())
                 } else {
                     DrawCh::new(' ', default_style.clone())
                 };
@@ -564,30 +583,6 @@ impl Element for SnekGame {
 
 #[allow(dead_code)]
 impl SnekGame {
-    fn handle_direction(&self, key: KeyEvent) {
-        let new_dir = if key == Keyboard::KEY_K || key == Keyboard::KEY_UP {
-            Direction::Up
-        } else if key == Keyboard::KEY_J || key == Keyboard::KEY_DOWN {
-            Direction::Down
-        } else if key == Keyboard::KEY_H || key == Keyboard::KEY_LEFT {
-            Direction::Left
-        } else if key == Keyboard::KEY_L || key == Keyboard::KEY_RIGHT {
-            Direction::Right
-        } else {
-            return;
-        };
-        let cur = *self.direction.borrow();
-        let opposite = match new_dir {
-            Direction::Up => Direction::Down,
-            Direction::Down => Direction::Up,
-            Direction::Left => Direction::Right,
-            Direction::Right => Direction::Left,
-        };
-        if cur != opposite {
-            *self.direction.borrow_mut() = new_dir;
-        }
-    }
-
     /// Test helper: replace all food with a single RedApple at the given position.
     pub fn spawn_food_at(&self, x: usize, y: usize) {
         self.foods.borrow_mut().clear();

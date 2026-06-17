@@ -649,7 +649,7 @@ fn test_multi_tick_movement_down() {
 
 /// Multi-tick test: snek moves left correctly.
 /// Start by pressing K (Up) to enter Running, then press H (Left) to change direction.
-/// (Cannot start Right then go Left — handle_direction blocks opposite.)
+/// (Cannot start Right then go Left — opposite-direction guard blocks it.)
 #[test]
 fn test_multi_tick_movement_left() {
     let (game, _, ctx) = make_initialized_game();
@@ -843,7 +843,7 @@ fn test_boundary_collision_bottom_wall() {
     );
 }
 
-/// Self-collision prevention: handle_direction blocks 180° turns.
+/// Self-collision prevention: opposite-direction guard blocks 180° turns.
 /// A snek moving Right cannot immediately turn Left (and vice versa).
 #[test]
 fn test_self_collision_u_turn_blocked() {
@@ -851,7 +851,7 @@ fn test_self_collision_u_turn_blocked() {
     // Start moving Right: head (10,5) → (11,5)
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L]));
     assert_eq!(game.direction(), Direction::Right);
-    // Try to turn Left (opposite of Right — blocked by handle_direction):
+    // Try to turn Left (opposite of Right — blocked by opposite-direction guard):
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
     assert_eq!(
         game.direction(),
@@ -945,6 +945,8 @@ fn test_tick_on_clone_updates_shared_snek() {
 #[test]
 fn test_main_loop_pattern_clone_tick_works() {
     let (game, ctrl, ctx) = make_initialized_game();
+    // Place food at a known position far from the snek's path to avoid flaky eating.
+    game.spawn_food_at(0, 0);
     let tick_game = game.clone();
 
     // In main.rs, the tick loop calls tick_game.tick().
