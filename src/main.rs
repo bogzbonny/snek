@@ -1,8 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crossterm::style::Color as AnsiColor;
 use tokio::time::interval;
-use yeehaw::{DynVal, Element, ParentPane, Tui, VerticalStack};
+use yeehaw::elements::containers::border::{BorderProperies, BorderSty};
+use yeehaw::{
+    Attributes, Bordered, Color, DynVal, Element, FgTranspSrc, ParentPane, Style, Tui,
+    VerticalStack,
+};
 
 pub mod controls;
 pub mod game;
@@ -35,7 +40,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loc.set_dyn_height(DynVal::new_flex(1.0));
         game.set_dyn_location_set(loc);
     }
-    stack.push(Box::new(game));
+    let border_style = Style {
+        fg: Some((Color::ANSI(AnsiColor::White), FgTranspSrc::LowerBg)),
+        bg: None,
+        underline_color: None,
+        attr: Attributes::new(),
+    };
+    let bordered = Bordered::new(
+        &ctx,
+        Box::new(game),
+        BorderSty::new_thin_single(border_style),
+        BorderProperies::new_basic(),
+    );
+    stack.push(Box::new(bordered));
 
     {
         let mut loc = control_bar.get_dyn_location_set().clone();

@@ -4,11 +4,10 @@ use std::time::Duration;
 
 use crossterm::event::KeyEvent;
 use rand::Rng;
-use yeehaw::elements::containers::border::{BorderProperies, BorderSty};
 use yeehaw::{
-    Attributes, Bordered, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element,
-    ElementID, Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, Rc,
-    ReceivableEvent, ReceivableEvents, Ref, Style,
+    Attributes, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element, ElementID,
+    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, Rc, ReceivableEvent,
+    ReceivableEvents, Ref, Style,
 };
 
 use crate::config::Config;
@@ -87,7 +86,7 @@ impl Theme {
 
 #[derive(Clone)]
 pub struct SnekGame {
-    bordered: Bordered,
+    pane: Pane,
     snek: Rc<RefCell<Vec<(usize, usize)>>>,
     direction: Rc<RefCell<Direction>>,
     foods: Rc<RefCell<Vec<Food>>>,
@@ -138,21 +137,12 @@ impl SnekGame {
             rec_evs.push(ReceivableEvent::from(key));
         }
 
-        let inner_pane = Pane::new(ctx, "snek_game");
-        inner_pane.set_focused_receivable_events(rec_evs);
-        inner_pane.set_focused(true);
-
-        let border_style = fg_style(Color::ANSI(crossterm::style::Color::White));
-        let bordered = Bordered::new(
-            ctx,
-            Box::new(inner_pane),
-            BorderSty::new_thin_single(border_style),
-            BorderProperies::new_basic(),
-        );
-        bordered.set_focused(true);
+        let pane = Pane::new(ctx, "snek_game");
+        pane.set_focused_receivable_events(rec_evs);
+        pane.set_focused(true);
 
         let game = SnekGame {
-            bordered,
+            pane,
             snek: Rc::new(RefCell::new(Vec::new())),
             direction: Rc::new(RefCell::new(Direction::Right)),
             foods: Rc::new(RefCell::new(Vec::new())),
@@ -171,10 +161,6 @@ impl SnekGame {
             direction_queue: Rc::new(RefCell::new(VecDeque::new())),
         };
         game
-    }
-
-    pub fn bordered(&self) -> &Bordered {
-        &self.bordered
     }
 
     pub fn snek(&self) -> Vec<(usize, usize)> {
@@ -264,15 +250,15 @@ impl Element for SnekGame {
     }
 
     fn id(&self) -> ElementID {
-        self.bordered.pane.id()
+        self.pane.id()
     }
 
     fn can_receive(&self, ev: &Event) -> bool {
-        self.bordered.pane.can_receive(ev)
+        self.pane.can_receive(ev)
     }
 
     fn receivable(&self) -> Vec<Rc<RefCell<ReceivableEvents>>> {
-        self.bordered.pane.receivable()
+        self.pane.receivable()
     }
 
     fn receive_event(&self, ctx: &Context, ev: Event) -> (bool, EventResponses) {
@@ -362,14 +348,14 @@ impl Element for SnekGame {
     }
 
     fn set_focused(&self, focused: bool) {
-        self.bordered.pane.set_focused(focused);
+        self.pane.set_focused(focused);
     }
 
     fn get_focused(&self) -> bool {
-        self.bordered.pane.get_focused()
+        self.pane.get_focused()
     }
 
-    fn drawing(&self, ctx: &Context, dr: &DrawRegion, force_update: bool) -> Vec<DrawUpdate> {
+    fn drawing(&self, _ctx: &Context, dr: &DrawRegion, _force_update: bool) -> Vec<DrawUpdate> {
         let pane_w = dr.size.width as usize;
         let pane_h = dr.size.height as usize;
 
@@ -380,9 +366,9 @@ impl Element for SnekGame {
         let board_size = *self.ctrl_board_size.borrow();
         let (board_w, board_h, content_x, content_y) = match board_size {
             BoardSize::Auto => {
-                // Playable area: full inner pane minus 1 row for status line.
-                let w = pane_w.saturating_sub(2);
-                let h = pane_h.saturating_sub(3);
+                // Playable area: full pane minus 1 row for status line.
+                let w = pane_w;
+                let h = pane_h.saturating_sub(1);
                 // Only cache when playable area is large enough. Only grow, never shrink.
                 if w.saturating_mul(h) >= 4 {
                     let cur_w = *self.last_board_w.borrow();
@@ -396,16 +382,16 @@ impl Element for SnekGame {
                 let cached_h = *self.last_board_h.borrow();
                 let bw = if cached_w > 0 { cached_w } else { w };
                 let bh = if cached_h > 0 { cached_h } else { h };
-                // Content starts 1 cell inside the Bordered border.
-                (bw, bh, 1, 1)
+                // Content starts at (0, 0) — Bordered wrapper handles the border outside.
+                (bw, bh, 0, 0)
             }
             BoardSize::Fixed(w, h) => {
-                // Center the board within the Bordered inner area.
-                let inner_w = pane_w.saturating_sub(2);
-                let inner_h = pane_h.saturating_sub(2);
+                // Center the board within the pane.
+                let inner_w = pane_w;
+                let inner_h = pane_h;
                 let ox = inner_w.saturating_sub(w) / 2;
                 let oy = inner_h.saturating_sub(h) / 2;
-                (w, h, 1 + ox, 1 + oy)
+                (w, h, ox, oy)
             }
         };
 
@@ -414,8 +400,7 @@ impl Element for SnekGame {
             self.init_board(board_w, board_h);
         }
 
-        // Let Bordered draw its border, then layer game content on top.
-        let mut updates = self.bordered.drawing(ctx, dr, force_update);
+        let mut updates = Vec::new();
 
         let mut chs = Vec::new();
         let theme = *self.ctrl_theme.borrow();
@@ -505,75 +490,75 @@ impl Element for SnekGame {
     }
 
     fn get_attribute(&self, key: &str) -> Option<Vec<u8>> {
-        self.bordered.pane.get_attribute(key)
+        self.pane.get_attribute(key)
     }
 
     fn set_attribute_inner(&self, key: &str, value: Vec<u8>) {
-        self.bordered.pane.set_attribute_inner(key, value);
+        self.pane.set_attribute_inner(key, value);
     }
 
     fn set_parent(&self, parent: Box<dyn yeehaw::Parent>) {
-        self.bordered.pane.set_parent(parent);
+        self.pane.set_parent(parent);
     }
 
     fn set_hook(&self, kind: &str, el_id: ElementID, hook: yeehaw::ElementHookFn) {
-        self.bordered.pane.set_hook(kind, el_id, hook);
+        self.pane.set_hook(kind, el_id, hook);
     }
 
     fn remove_hook(&self, kind: &str, el_id: ElementID) {
-        self.bordered.pane.remove_hook(kind, el_id);
+        self.pane.remove_hook(kind, el_id);
     }
 
     fn clear_hooks_by_id(&self, el_id: ElementID) {
-        self.bordered.pane.clear_hooks_by_id(el_id);
+        self.pane.clear_hooks_by_id(el_id);
     }
 
     fn call_hooks_of_kind(&self, kind: &str) {
-        self.bordered.pane.call_hooks_of_kind(kind);
+        self.pane.call_hooks_of_kind(kind);
     }
 
     fn get_dyn_location_set(&self) -> Ref<'_, yeehaw::DynLocationSet> {
-        self.bordered.pane.get_dyn_location_set()
+        self.pane.get_dyn_location_set()
     }
 
     fn get_visible(&self) -> bool {
-        self.bordered.pane.get_visible()
+        self.pane.get_visible()
     }
 
     fn get_ref_cell_dyn_location_set(&self) -> Rc<RefCell<yeehaw::DynLocationSet>> {
-        self.bordered.pane.get_ref_cell_dyn_location_set()
+        self.pane.get_ref_cell_dyn_location_set()
     }
 
     fn get_ref_cell_visible(&self) -> Rc<RefCell<bool>> {
-        self.bordered.pane.get_ref_cell_visible()
+        self.pane.get_ref_cell_visible()
     }
 
     fn get_ref_cell_overflow(&self) -> Rc<RefCell<bool>> {
-        self.bordered.pane.get_ref_cell_overflow()
+        self.pane.get_ref_cell_overflow()
     }
 
     fn set_content_x_offset(&self, dr: Option<&DrawRegion>, x: usize) {
-        self.bordered.pane.set_content_x_offset(dr, x);
+        self.pane.set_content_x_offset(dr, x);
     }
 
     fn set_content_y_offset(&self, dr: Option<&DrawRegion>, y: usize) {
-        self.bordered.pane.set_content_y_offset(dr, y);
+        self.pane.set_content_y_offset(dr, y);
     }
 
     fn get_content_x_offset(&self) -> usize {
-        self.bordered.pane.get_content_x_offset()
+        self.pane.get_content_x_offset()
     }
 
     fn get_content_y_offset(&self) -> usize {
-        self.bordered.pane.get_content_y_offset()
+        self.pane.get_content_y_offset()
     }
 
     fn get_content_width(&self, dr: Option<&DrawRegion>) -> usize {
-        self.bordered.pane.get_content_width(dr)
+        self.pane.get_content_width(dr)
     }
 
     fn get_content_height(&self, dr: Option<&DrawRegion>) -> usize {
-        self.bordered.pane.get_content_height(dr)
+        self.pane.get_content_height(dr)
     }
 }
 
