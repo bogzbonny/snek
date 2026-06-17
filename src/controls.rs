@@ -121,7 +121,7 @@ pub struct ControlState {
 impl ControlState {
     pub fn new(ctx: &Context) -> Self {
         Self {
-            tick_interval: Rc::new(RefCell::new(Duration::from_millis(150))),
+            tick_interval: Rc::new(RefCell::new(Duration::from_millis(251))),
             board_size: Rc::new(RefCell::new(BoardSize::Auto)),
             theme: Rc::new(RefCell::new(Theme::Classic)),
             score: Rc::new(RefCell::new(0)),
@@ -148,38 +148,16 @@ pub fn build_control_bar(
     stack.push(Box::new(Label::new(ctx, "Speed")));
 
     let slider = Slider::new_basic_line(ctx);
-    let slider_pos = slider.position.clone();
+    *slider.position.borrow_mut() = 0.5;
     let tick_interval = state.tick_interval.clone();
     *slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
-        // Map 0.0..=1.0 → 500ms..=50ms
-        let ms = (500.0 - pos * 450.0) as u64;
+        // Map 0.0..=1.0 → 500ms..=2.5ms
+        let ms = (500.0 - pos * 497.5) as u64;
         *tick_interval.borrow_mut() = Duration::from_millis(ms);
         EventResponses::default()
     });
     stack.push(Box::new(slider));
-
-    // --- Difficulty dropdown ---
-    let diff_tick_interval = state.tick_interval.clone();
-    let diff_dropdown = DropdownList::new(
-        ctx,
-        vec!["Slow", "Medium", "Fast", "Insane"],
-        Box::new(move |_ctx, selected| {
-            let pos = match selected.as_str() {
-                "Slow" => 0.0,
-                "Medium" => 0.5,
-                "Fast" => 0.75,
-                "Insane" => 1.0,
-                _ => 0.0,
-            };
-            *slider_pos.borrow_mut() = pos;
-            // Also update tick_interval directly; setting slider_pos alone does not trigger adjust_fn.
-            let ms = (500.0 - pos * 450.0) as u64;
-            *diff_tick_interval.borrow_mut() = Duration::from_millis(ms);
-            EventResponses::default()
-        }),
-    );
-    stack.push(Box::new(diff_dropdown));
 
     // --- Board size dropdown ---
     let board_size = state.board_size.clone();
