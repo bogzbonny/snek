@@ -100,6 +100,7 @@ pub struct SnekGame {
     ctrl_high_score: Rc<RefCell<usize>>,
     ctrl_state: Rc<RefCell<GameState>>,
     ctrl_num_foods: Rc<RefCell<usize>>,
+    ctrl_no_walls: Rc<RefCell<bool>>,
     // Last-known board dimensions for Auto mode (Rc so clones share state with original)
     last_board_w: Rc<RefCell<usize>>,
     last_board_h: Rc<RefCell<usize>>,
@@ -155,6 +156,7 @@ impl SnekGame {
             ctrl_high_score: ctrl.high_score.clone(),
             ctrl_state: ctrl.state.clone(),
             ctrl_num_foods: ctrl.num_foods.clone(),
+            ctrl_no_walls: ctrl.no_walls.clone(),
             last_board_w: Rc::new(RefCell::new(0)),
             last_board_h: Rc::new(RefCell::new(0)),
             board_initialized: Rc::new(RefCell::new(false)),
@@ -691,7 +693,7 @@ impl SnekGame {
         let (hx, hy) = snek[0];
 
         // Consistent wrapping arithmetic for all directions; bounds check catches OOB.
-        let (nx, ny) = match dir {
+        let (mut nx, mut ny) = match dir {
             Direction::Up => (hx, hy.wrapping_sub(1)),
             Direction::Down => (hx, hy.wrapping_add(1)),
             Direction::Left => (hx.wrapping_sub(1), hy),
@@ -707,9 +709,15 @@ impl SnekGame {
         };
 
         if nx >= bw || ny >= bh {
-            drop(snek);
-            *self.ctrl_state.borrow_mut() = GameState::GameOver;
-            return;
+            if *self.ctrl_no_walls.borrow() {
+                // Wrap to opposite side: nx == bw → 0, nx == usize::MAX → bw-1
+                nx = if nx >= bw { if nx == bw { 0 } else { bw - 1 } } else { nx };
+                ny = if ny >= bh { if ny == bh { 0 } else { bh - 1 } } else { ny };
+            } else {
+                drop(snek);
+                *self.ctrl_state.borrow_mut() = GameState::GameOver;
+                return;
+            }
         }
 
         // Exclude tail from collision check when not eating: the tail will move away.
@@ -753,7 +761,8 @@ impl SnekGame {
                     BoardSize::Fixed(w, h) => format!("{}x{}", w, h),
                 };
                 let num_foods = *self.ctrl_num_foods.borrow();
-                Config::save_values(speed_ms, &board_size, new_score, num_foods);
+                let no_walls = *self.ctrl_no_walls.borrow();
+                Config::save_values(speed_ms, &board_size, new_score, num_foods, no_walls);
             }
 
             drop(snek);

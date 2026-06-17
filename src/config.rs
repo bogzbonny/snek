@@ -9,6 +9,8 @@ pub struct Config {
     pub high_score: usize,
     #[serde(default)]
     pub num_foods: usize,
+    #[serde(default)]
+    pub no_walls: bool,
 }
 
 impl Default for Config {
@@ -18,6 +20,7 @@ impl Default for Config {
             board_size: "Auto".to_string(),
             high_score: 0,
             num_foods: 1,
+            no_walls: false,
         }
     }
 }
@@ -29,6 +32,7 @@ impl Config {
             board_size: "Auto".to_string(),
             high_score: 0,
             num_foods: 1,
+            no_walls: false,
         }
     }
 
@@ -66,12 +70,13 @@ impl Config {
     }
 
     /// Save config from individual values.
-    pub fn save_values(speed_ms: u64, board_size: &str, high_score: usize, num_foods: usize) {
+    pub fn save_values(speed_ms: u64, board_size: &str, high_score: usize, num_foods: usize, no_walls: bool) {
         Self {
             speed_ms,
             board_size: board_size.to_string(),
             high_score,
             num_foods,
+            no_walls,
         }
         .save();
     }

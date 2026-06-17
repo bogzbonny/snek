@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use yeehaw::{
-    Button, Context, DynVal, Element, EventResponses, Label, ParentPane, Slider,
+    Button, Checkbox, Context, DynVal, Element, EventResponses, Label, ParentPane, Slider,
     SingleLineTextBox,
 };
 
@@ -20,6 +20,7 @@ pub struct ControlState {
     pub high_score: Rc<RefCell<usize>>,
     pub state: Rc<RefCell<GameState>>,
     pub num_foods: Rc<RefCell<usize>>,
+    pub no_walls: Rc<RefCell<bool>>,
 }
 
 impl ControlState {
@@ -59,6 +60,7 @@ impl ControlState {
             high_score: Rc::new(RefCell::new(cfg.high_score)),
             state: Rc::new(RefCell::new(GameState::Paused)),
             num_foods: Rc::new(RefCell::new(num_foods)),
+            no_walls: Rc::new(RefCell::new(cfg.no_walls)),
         }
     }
 }
@@ -90,12 +92,13 @@ pub fn build_control_bar(
     let board_size = state.board_size.clone();
     let high_score = state.high_score.clone();
     let num_foods = state.num_foods.clone();
+    let no_walls = state.no_walls.clone();
     *speed_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 50ms..=2.5ms
         let ms = (50.0 - pos * 47.5) as u64;
         *tick_interval.borrow_mut() = Duration::from_millis(ms);
-        Config::save_values(ms, &board_size_to_str(&board_size.borrow()), *high_score.borrow(), *num_foods.borrow());
+        Config::save_values(ms, &board_size_to_str(&board_size.borrow()), *high_score.borrow(), *num_foods.borrow(), *no_walls.borrow());
         EventResponses::default()
     });
     pane.add_element(Box::new(speed_slider.at(7, 0)));
@@ -105,6 +108,7 @@ pub fn build_control_bar(
     let tick_interval = state.tick_interval.clone();
     let high_score = state.high_score.clone();
     let num_foods = state.num_foods.clone();
+    let no_walls = state.no_walls.clone();
 
     let width_tb = SingleLineTextBox::new(ctx);
     let height_tb = SingleLineTextBox::new(ctx);
@@ -137,6 +141,7 @@ pub fn build_control_bar(
         let tick_interval = tick_interval.clone();
         let high_score = high_score.clone();
         let num_foods = num_foods.clone();
+        let no_walls = no_walls.clone();
         let height_tb = height_tb.clone();
         let width_clone = width_tb.clone();
         width_tb.set_hook(Box::new(move |_ctx, is_final, text| {
@@ -160,6 +165,7 @@ pub fn build_control_bar(
                 &board_size_to_str(&board_size.borrow()),
                 *high_score.borrow(),
                 *num_foods.borrow(),
+                *no_walls.borrow(),
             );
             EventResponses::default()
         }));
@@ -171,6 +177,7 @@ pub fn build_control_bar(
         let tick_interval = tick_interval.clone();
         let high_score = high_score.clone();
         let num_foods = num_foods.clone();
+        let no_walls = no_walls.clone();
         let width_tb = width_tb.clone();
         let height_clone = height_tb.clone();
         height_tb.set_hook(Box::new(move |_ctx, is_final, text| {
@@ -194,6 +201,7 @@ pub fn build_control_bar(
                 &board_size_to_str(&board_size.borrow()),
                 *high_score.borrow(),
                 *num_foods.borrow(),
+                *no_walls.borrow(),
             );
             EventResponses::default()
         }));
@@ -228,6 +236,13 @@ pub fn build_control_bar(
     let tick_interval = state.tick_interval.clone();
     let board_size = state.board_size.clone();
     let high_score = state.high_score.clone();
+    let no_walls = state.no_walls.clone();
+    // Clones for checkbox callback (must be before food_slider closure moves originals)
+    let tick_interval_cb = tick_interval.clone();
+    let board_size_cb = board_size.clone();
+    let high_score_cb = high_score.clone();
+    let num_foods_cb = num_foods.clone();
+    let no_walls_cb_ref = no_walls.clone();
     *food_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 1..=100
@@ -238,10 +253,29 @@ pub fn build_control_bar(
             &board_size_to_str(&board_size.borrow()),
             *high_score.borrow(),
             n,
+            *no_walls.borrow(),
         );
         EventResponses::default()
     });
     pane.add_element(Box::new(food_slider.at(8, 1)));
+
+    // No walls checkbox
+    pane.add_element(Box::new(Label::new(ctx, "No walls").at(60, 1)));
+
+    let no_walls_cb = Checkbox::new(ctx);
+    *no_walls_cb.checked.borrow_mut() = *state.no_walls.borrow();
+    no_walls_cb.set_fn(Box::new(move |_ctx, checked| {
+        *no_walls_cb_ref.borrow_mut() = checked;
+        Config::save_values(
+            tick_interval_cb.borrow().as_millis() as u64,
+            &board_size_to_str(&board_size_cb.borrow()),
+            *high_score_cb.borrow(),
+            *num_foods_cb.borrow(),
+            checked,
+        );
+        EventResponses::default()
+    }));
+    pane.add_element(Box::new(no_walls_cb.at(68, 1)));
 
     Box::new(pane)
 }
