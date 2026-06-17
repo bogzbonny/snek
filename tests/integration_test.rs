@@ -96,10 +96,16 @@ fn test_arrow_right_starts_game_and_sets_right() {
 
 #[test]
 fn test_direction_change_while_running() {
-    let (game, _, ctx) = make_game();
+    // Direction changes are queued; direction() reflects the current direction,
+    // not the queued one. The queued change is applied on the next tick.
+    let (game, _, ctx) = make_initialized_game();
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
     assert_eq!(game.direction(), Direction::Up);
+    // Press Left while Running — queued, not applied yet.
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
+    assert_eq!(game.direction(), Direction::Up, "queued change should not affect direction() yet");
+    // Tick applies the queued Left.
+    game.tick(&ctx);
     assert_eq!(game.direction(), Direction::Left);
 }
 
@@ -361,14 +367,15 @@ fn test_direction_change_while_running_then_tick() {
     assert_eq!(game.direction(), Direction::Up);
     assert_eq!(game.snake()[0], (10, 4));
 
-    // Change to Left while Running.
+    // Change to Left while Running — queued, not applied yet.
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
-    assert_eq!(game.direction(), Direction::Left);
-    // Snake hasn't moved yet — only direction changed.
+    assert_eq!(game.direction(), Direction::Up, "queued change should not affect direction() yet");
+    // Snake hasn't moved yet.
     assert_eq!(game.snake()[0], (10, 4), "direction change alone should not move");
 
-    // Now tick — snake should move Left.
+    // Tick applies the queued Left and moves.
     game.tick(&ctx);
+    assert_eq!(game.direction(), Direction::Left);
     assert_eq!(
         game.snake()[0],
         (9, 4),
@@ -446,13 +453,17 @@ fn test_hierarchy_dispatch_all_direction_keys() {
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
     assert_eq!(game.direction(), Direction::Up);
 
+    // Direction changes are queued; tick applies one per frame.
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
+    game.tick(&ctx);
     assert_eq!(game.direction(), Direction::Left);
 
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_J]));
+    game.tick(&ctx);
     assert_eq!(game.direction(), Direction::Down);
 
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L]));
+    game.tick(&ctx);
     assert_eq!(game.direction(), Direction::Right);
 }
 
@@ -463,13 +474,17 @@ fn test_hierarchy_dispatch_arrow_keys() {
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_UP]));
     assert_eq!(game.direction(), Direction::Up);
 
+    // Direction changes are queued; tick applies one per frame.
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_LEFT]));
+    game.tick(&ctx);
     assert_eq!(game.direction(), Direction::Left);
 
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_DOWN]));
+    game.tick(&ctx);
     assert_eq!(game.direction(), Direction::Down);
 
     root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_RIGHT]));
+    game.tick(&ctx);
     assert_eq!(game.direction(), Direction::Right);
 }
 
@@ -611,11 +626,12 @@ fn test_multi_tick_movement_left() {
     // Start Running by pressing Up: head (10,5) → (10,4)
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
     assert_eq!(game.snake()[0], (10, 4));
-    // Change to Left (Left is NOT opposite of Up — allowed):
+    // Change to Left (Left is NOT opposite of Up — allowed): queued, not applied yet.
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
-    assert_eq!(game.direction(), Direction::Left);
-    // Tick manually: head (10,4) → (9,4)
+    assert_eq!(game.direction(), Direction::Up, "queued change should not affect direction() yet");
+    // Tick applies queued Left: head (10,4) → (9,4)
     game.tick(&ctx);
+    assert_eq!(game.direction(), Direction::Left);
     assert_eq!(game.snake()[0], (9, 4));
     // Continue left: (8,4), (7,4), (6,4)
     for i in 2..=4 {
@@ -957,4 +973,120 @@ fn test_apple_not_on_border_small_board() {
             apple
         );
     }
+}
+
+// ============================================================================
+// Direction queue tests — verify one direction change is applied per tick,
+// preventing rapid keypresses from causing the snake to reverse into itself.
+// ============================================================================
+
+/// Rapid keypresses are queued: Right -> Down -> Left processes Down first,
+/// then Left on the next tick. The snake never reverses into itself.
+#[test]
+fn test_rapid_keypress_queue_processes_one_per_tick() {
+    let (game, _, ctx) = make_initialized_game();
+    // Start moving Right
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L]));
+    assert_eq!(game.direction(), Direction::Right);
+    assert_eq!(game.snake()[0], (11, 5));
+
+    // Rapidly press Down then Left before the next tick
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_J])); // Down
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H])); // Left
+
+    // Direction should still be Right — changes are queued, not applied yet
+    assert_eq!(game.direction(), Direction::Right);
+
+    // First tick: apply Down (first in queue)
+    game.tick(&ctx);
+    assert_eq!(game.direction(), Direction::Down);
+    assert_eq!(game.snake()[0], (11, 6), "snake moves Down");
+
+    // Second tick: apply Left (second in queue)
+    game.tick(&ctx);
+    assert_eq!(game.direction(), Direction::Left);
+    assert_eq!(game.snake()[0], (10, 6), "snake moves Left");
+}
+
+/// Queue rejects new entries when it reaches maximum length of 10.
+#[test]
+fn test_direction_queue_max_length() {
+    let (game, _, ctx) = make_initialized_game();
+    // Start moving Up
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
+    assert_eq!(game.direction(), Direction::Up);
+
+    // Enqueue 10 direction changes
+    for _ in 0..10 {
+        game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L])); // Right
+    }
+
+    // 11th press should be rejected (queue already at 10)
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H])); // Left — rejected
+
+    // Process all 10 queued Right directions
+    for _ in 0..10 {
+        game.tick(&ctx);
+        assert_eq!(game.direction(), Direction::Right);
+    }
+
+    // Queue should be empty now — Left was never enqueued
+    game.tick(&ctx);
+    assert_eq!(
+        game.direction(),
+        Direction::Right,
+        "direction should stay Right — Left was rejected due to queue limit"
+    );
+}
+
+/// Opposite direction is rejected at dequeue time, not at enqueue time.
+/// The rejected item is discarded and the next tick processes the next item.
+#[test]
+fn test_opposite_direction_rejected_at_dequeue() {
+    let (game, _, ctx) = make_initialized_game();
+    // Start moving Right
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L]));
+    assert_eq!(game.direction(), Direction::Right);
+
+    // Queue: Left (opposite of Right, will be rejected), then Down
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H])); // Left
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_J])); // Down
+
+    // First tick: dequeue Left, reject (opposite of Right), direction stays Right
+    game.tick(&ctx);
+    assert_eq!(
+        game.direction(),
+        Direction::Right,
+        "opposite direction rejected at dequeue, direction unchanged"
+    );
+    assert_eq!(game.snake()[0], (12, 5), "snake continues Right");
+
+    // Second tick: dequeue Down, apply
+    game.tick(&ctx);
+    assert_eq!(game.direction(), Direction::Down);
+    assert_eq!(game.snake()[0], (12, 6), "snake moves Down");
+}
+
+/// Restart clears the direction queue.
+#[test]
+fn test_restart_clears_direction_queue() {
+    let (game, _, ctx) = make_initialized_game();
+    // Start moving Right
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L]));
+
+    // Queue some direction changes
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_J])); // Down
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H])); // Left
+
+    // Restart should clear the queue
+    game.restart();
+    assert_eq!(game.state(), GameState::Paused);
+    assert_eq!(game.direction(), Direction::Right);
+
+    // Start again and tick — no queued directions should apply
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K])); // Up
+    assert_eq!(game.direction(), Direction::Up);
+    game.tick(&ctx);
+    // If queue wasn't cleared, Down would be applied here instead of staying Up
+    assert_eq!(game.direction(), Direction::Up, "no stale queue entries after restart");
 }

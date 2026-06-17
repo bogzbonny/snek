@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use crossterm::event::KeyEvent;
@@ -90,6 +91,8 @@ pub struct SnakeGame {
     board_initialized: Rc<RefCell<bool>>,
     // Track board size to detect mid-game changes (Rc so clones share)
     last_board_size: Rc<RefCell<BoardSize>>,
+    // Queue of pending direction changes; one is dequeued per tick (max 10)
+    direction_queue: Rc<RefCell<VecDeque<Direction>>>,
 }
 
 fn fg_style(color: Color) -> Style {
@@ -143,6 +146,7 @@ impl SnakeGame {
             last_board_h: Rc::new(RefCell::new(0)),
             board_initialized: Rc::new(RefCell::new(false)),
             last_board_size: Rc::new(RefCell::new(*ctrl.board_size.borrow())),
+            direction_queue: Rc::new(RefCell::new(VecDeque::new())),
         };
         game
     }
@@ -197,6 +201,7 @@ impl SnakeGame {
         if *self.direction.borrow() != opposite {
             *self.direction.borrow_mut() = dir;
         }
+        self.direction_queue.borrow_mut().clear();
     }
 
     fn sync_status_label(&self) {
@@ -304,7 +309,11 @@ impl Element for SnakeGame {
                     *self.ctrl_state.borrow_mut() = GameState::Paused;
                     self.sync_status_label();
                 } else if is_dir_key(key) {
-                    self.handle_direction(key);
+                    let new_dir = key_to_direction(key);
+                    let mut q = self.direction_queue.borrow_mut();
+                    if q.len() < 10 {
+                        q.push_back(new_dir);
+                    }
                 }
             }
             GameState::GameOver => {
@@ -585,6 +594,7 @@ impl SnakeGame {
             self.sync_score_labels();
         }
         *self.ctrl_state.borrow_mut() = GameState::Paused;
+        self.direction_queue.borrow_mut().clear();
         self.sync_status_label();
     }
 
@@ -604,6 +614,22 @@ impl SnakeGame {
         // Skip if board not yet initialized by drawing()
         if !*self.board_initialized.borrow() {
             return;
+        }
+
+        // Process one queued direction change per tick
+        {
+            if let Some(next_dir) = self.direction_queue.borrow_mut().pop_front() {
+                let cur = *self.direction.borrow();
+                let opposite = match next_dir {
+                    Direction::Up => Direction::Down,
+                    Direction::Down => Direction::Up,
+                    Direction::Left => Direction::Right,
+                    Direction::Right => Direction::Left,
+                };
+                if cur != opposite {
+                    *self.direction.borrow_mut() = next_dir;
+                }
+            }
         }
 
         // Detect board size change mid-game; restart to reposition snake/apple
