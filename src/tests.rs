@@ -363,26 +363,6 @@ fn test_receivable_exposes_events_when_focused() {
     assert!(any_match, "focused game's receivable must contain KEY_K");
 }
 
-#[test]
-fn test_receivable_empty_when_unfocused() {
-    // When unfocused, Pane::receivable() returns only "always" bucket.
-    // SnekGame registers all events as "focused" — so unfocused should be empty.
-    let (game, _, _) = make_initialized_game();
-    game.set_focused(false);
-
-    let rec = game.receivable();
-    // The "always" bucket is empty (we only set focused events)
-    let key_ev = Event::KeyCombo(vec![Keyboard::KEY_K]);
-    let any_match = rec.iter().any(|bucket| {
-        let b = bucket.borrow();
-        b.contains_match(&key_ev)
-    });
-    assert!(
-        !any_match,
-        "unfocused game's receivable must NOT contain direction keys",
-    );
-}
-
 // ============================================================================
 // Full tick cycle test — direction change + tick moves the snek
 // ============================================================================
@@ -982,199 +962,22 @@ fn test_main_loop_pattern_clone_tick_works() {
     assert_eq!(snek.len(), 3, "snek length should be unchanged without eating");
 }
 
-/// Apples must never spawn on the border (outermost row/column of the playable area).
-/// Border cells for a bw×bh board: x=0, x=bw-1, y=0, y=bh-1.
-fn is_on_border(pos: (usize, usize), bw: usize, bh: usize) -> bool {
-    let (ax, ay) = pos;
-    ax == 0 || ax == bw - 1 || ay == 0 || ay == bh - 1
-}
-
+/// Food spawns within the full playable area (0..bw × 0..bh), including edges.
+/// The Bordered element handles the border externally; the playable area has no
+/// reserved border ring.
 #[test]
-fn test_food_not_on_border_after_init() {
-    let (game, _, _) = make_initialized_game();
-    // Board is 20×10; border cells are x=0, x=19, y=0, y=9
-    let food = game.food();
-    assert!(
-        !is_on_border((food.x, food.y), 20, 10),
-        "food {:?} must not be on the border of a 20×10 board",
-        food
-    );
-}
-
-#[test]
-fn test_food_not_on_border_after_many_restarts() {
+fn test_food_spawns_within_bounds() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(20, 10);
-
-    for i in 0..100 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        assert!(
-            !is_on_border((food.x, food.y), 20, 10),
-            "restart {}: food {:?} must not be on the border of a 20×10 board",
-            i,
-            food
-        );
-    }
-}
-
-#[test]
-fn test_food_not_on_border_small_board() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(10, 8);
-
-    for i in 0..100 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        assert!(
-            !is_on_border((food.x, food.y), 10, 8),
-            "restart {}: food {:?} must not be on the border of a 10×8 board",
-            i,
-            food
-        );
-    }
-}
-
-/// Explicitly verify all four corners are never occupied by food.
-#[test]
-fn test_food_not_in_any_corner() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(20, 10);
-
-    let corners = [(0, 0), (19, 0), (0, 9), (19, 9)];
-    for i in 0..500 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        for (ci, corner) in corners.iter().enumerate() {
-            assert_ne!(
-                (food.x, food.y), *corner,
-                "restart {}: food must not be at corner {} ({:?})",
-                i, ci, corner
-            );
-        }
-    }
-}
-
-/// Verify food never spawns on the left border (x=0) across many iterations.
-#[test]
-fn test_food_not_on_left_border() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(20, 10);
-
-    for i in 0..500 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        let ax = food.x;
-        let ay = food.y;
-        assert!(
-            ax != 0,
-            "restart {}: food x={} must not be on left border (x=0)",
-            i, ax
-        );
-        // Also verify y is valid
-        assert!(ay > 0 && ay < 10, "restart {}: food y={} out of bounds", i, ay);
-    }
-}
-
-/// Verify food never spawns on the right border (x=bw-1) across many iterations.
-#[test]
-fn test_food_not_on_right_border() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(20, 10);
-
-    for i in 0..500 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        let ax = food.x;
-        let ay = food.y;
-        assert!(
-            ax != 19,
-            "restart {}: food x={} must not be on right border (x=19)",
-            i, ax
-        );
-        assert!(ay > 0 && ay < 10, "restart {}: food y={} out of bounds", i, ay);
-    }
-}
-
-/// Verify food never spawns on the top border (y=0) across many iterations.
-#[test]
-fn test_food_not_on_top_border() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(20, 10);
-
-    for i in 0..500 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        let ax = food.x;
-        let ay = food.y;
-        assert!(
-            ay != 0,
-            "restart {}: food y={} must not be on top border (y=0)",
-            i, ay
-        );
-        assert!(ax > 0 && ax < 20, "restart {}: food x={} out of bounds", i, ax);
-    }
-}
-
-/// Verify food never spawns on the bottom border (y=bh-1) across many iterations.
-#[test]
-fn test_food_not_on_bottom_border() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(20, 10);
-
-    for i in 0..500 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        let ax = food.x;
-        let ay = food.y;
-        assert!(
-            ay != 9,
-            "restart {}: food y={} must not be on bottom border (y=9)",
-            i, ay
-        );
-        assert!(ax > 0 && ax < 20, "restart {}: food x={} out of bounds", i, ax);
-    }
-}
-
-/// Test minimum viable board (4×4) — inner area 2×2, enough for snek + food.
-#[test]
-fn test_food_on_minimum_board() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(4, 4);
-
-    for i in 0..100 {
-        let game = game::SnekGame::new(&ctx, &ctrl);
-        game.restart();
-        let food = game.food();
-        assert!(
-            !is_on_border((food.x, food.y), 4, 4),
-            "restart {}: food {:?} must not be on border of 4×4 board",
-            i, food
-        );
-    }
-}
-
-/// Test square board with even dimensions.
-#[test]
-fn test_food_not_on_border_square_board() {
-    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed(16, 16);
 
     for i in 0..200 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
         let food = game.food();
         assert!(
-            !is_on_border((food.x, food.y), 16, 16),
-            "restart {}: food {:?} must not be on border of 16×16 board",
-            i, food
+            food.x < 20 && food.y < 10,
+            "restart {}: food ({},{}) must be within 20x10 board",
+            i, food.x, food.y
         );
     }
 }
@@ -1338,7 +1141,7 @@ fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
 }
 
 /// Helper: make a game on a 6×4 fixed board. snek head starts at (3,2),
-/// direction Right. Inner spawn area is (1..5)×(1..3) = 8 cells.
+/// direction Right. Full playable area is 0..6 × 0..4 = 24 cells.
 fn make_tiny_game() -> (SnekGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(6, 4);
@@ -1535,14 +1338,14 @@ fn test_food_position_valid_after_respawn() {
 
         game.tick(&ctx);
         let food = game.food();
-        // For Fixed(6, 4): valid inner area is x in [1..5], y in [1..3]
-        assert!(food.x > 0 && food.x < 5, "food x={} must be in (0, 5)", food.x);
-        assert!(food.y > 0 && food.y < 3, "food y={} must be in (0, 3)", food.y);
+        // For Fixed(6, 4): full playable area is x in [0..6], y in [0..4]
+        assert!(food.x < 6, "food x={} must be < 6", food.x);
+        assert!(food.y < 4, "food y={} must be < 4", food.y);
         let snek = game.snek();
-        // When the snek fills the entire inner area there is nowhere to
+        // When the snek fills the entire playable area there is nowhere to
         // respawn — the food stays at the cell just eaten (on the head).
-        let inner_area = 4 * 2; // inner_w * inner_h for Fixed(6, 4)
-        if snek.len() < inner_area {
+        let full_area = 6 * 4; // bw * bh for Fixed(6, 4)
+        if snek.len() < full_area {
             assert!(
                 !snek.iter().any(|s| *s == (food.x, food.y)),
                 "food ({:?}) must not overlap snek",

@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use crossterm::event::KeyEvent;
 use rand::Rng;
+use yeehaw::elements::containers::border::{BorderProperies, BorderSty};
 use yeehaw::{
-    Attributes, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element, ElementID,
-    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, Rc, ReceivableEvent,
-    ReceivableEvents, Ref, Style,
+    Attributes, Bordered, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element,
+    ElementID, Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, Rc,
+    ReceivableEvent, ReceivableEvents, Ref, Style,
 };
 
 use crate::config::Config;
@@ -86,7 +87,7 @@ impl Theme {
 
 #[derive(Clone)]
 pub struct SnekGame {
-    pane: Pane,
+    bordered: Bordered,
     snek: Rc<RefCell<Vec<(usize, usize)>>>,
     direction: Rc<RefCell<Direction>>,
     foods: Rc<RefCell<Vec<Food>>>,
@@ -137,12 +138,21 @@ impl SnekGame {
             rec_evs.push(ReceivableEvent::from(key));
         }
 
-        let pane = Pane::new(ctx, "snek_game");
-        pane.set_focused_receivable_events(rec_evs);
-        pane.set_focused(true);
+        let inner_pane = Pane::new(ctx, "snek_game");
+        inner_pane.set_focused_receivable_events(rec_evs);
+        inner_pane.set_focused(true);
+
+        let border_style = fg_style(Color::ANSI(crossterm::style::Color::White));
+        let bordered = Bordered::new(
+            ctx,
+            Box::new(inner_pane),
+            BorderSty::new_thin_single(border_style),
+            BorderProperies::new_basic(),
+        );
+        bordered.set_focused(true);
 
         let game = SnekGame {
-            pane,
+            bordered,
             snek: Rc::new(RefCell::new(Vec::new())),
             direction: Rc::new(RefCell::new(Direction::Right)),
             foods: Rc::new(RefCell::new(Vec::new())),
@@ -163,8 +173,8 @@ impl SnekGame {
         game
     }
 
-    pub fn pane(&self) -> &Pane {
-        &self.pane
+    pub fn bordered(&self) -> &Bordered {
+        &self.bordered
     }
 
     pub fn snek(&self) -> Vec<(usize, usize)> {
@@ -176,7 +186,12 @@ impl SnekGame {
     }
 
     pub fn food(&self) -> Food {
-        *self.foods.borrow().first().unwrap_or(&Food { kind: FoodKind::RedApple, x: 0, y: 0, consumed: true })
+        *self.foods.borrow().first().unwrap_or(&Food {
+            kind: FoodKind::RedApple,
+            x: 0,
+            y: 0,
+            consumed: true,
+        })
     }
 
     pub fn foods(&self) -> Vec<Food> {
@@ -222,12 +237,8 @@ impl SnekGame {
 
     /// Initialize snek, food and score for the given board dimensions.
     fn init_board(&self, bw: usize, bh: usize) {
-        // Guard: inner spawn area must be large enough for food.
-        // If too small, leave board_initialized=false so the next
-        // drawing() call (after a resize) retries.
-        let inner_w = bw.saturating_sub(2);
-        let inner_h = bh.saturating_sub(2);
-        if inner_w * inner_h < 4 {
+        // Guard: playable area must be large enough for food.
+        if bw.saturating_mul(bh) < 4 {
             return;
         }
 
@@ -253,15 +264,15 @@ impl Element for SnekGame {
     }
 
     fn id(&self) -> ElementID {
-        self.pane.id()
+        self.bordered.pane.id()
     }
 
     fn can_receive(&self, ev: &Event) -> bool {
-        self.pane.can_receive(ev)
+        self.bordered.pane.can_receive(ev)
     }
 
     fn receivable(&self) -> Vec<Rc<RefCell<ReceivableEvents>>> {
-        self.pane.receivable()
+        self.bordered.pane.receivable()
     }
 
     fn receive_event(&self, ctx: &Context, ev: Event) -> (bool, EventResponses) {
@@ -351,35 +362,29 @@ impl Element for SnekGame {
     }
 
     fn set_focused(&self, focused: bool) {
-        self.pane.set_focused(focused);
+        self.bordered.pane.set_focused(focused);
     }
 
     fn get_focused(&self) -> bool {
-        self.pane.get_focused()
+        self.bordered.pane.get_focused()
     }
 
-    fn drawing(&self, _ctx: &Context, dr: &DrawRegion, _force_update: bool) -> Vec<DrawUpdate> {
+    fn drawing(&self, ctx: &Context, dr: &DrawRegion, force_update: bool) -> Vec<DrawUpdate> {
         let pane_w = dr.size.width as usize;
         let pane_h = dr.size.height as usize;
 
+        if pane_w < 4 || pane_h < 4 {
+            return Vec::new();
+        }
+
         let board_size = *self.ctrl_board_size.borrow();
-        let (board_w, board_h, border_x, border_y) = match board_size {
+        let (board_w, board_h, content_x, content_y) = match board_size {
             BoardSize::Auto => {
+                // Playable area: full inner pane minus 1 row for status line.
                 let w = pane_w.saturating_sub(2);
-                let h = pane_h.saturating_sub(3); // reserve 1 row for status line
-                // Only cache dimensions when the inner spawn area is large enough
-                // for spawn_food to work (inner_w * inner_h >= 4).  This prevents
-                // layout-probe draws with tiny DrawRegions from corrupting the
-                // cached size that tick() relies on, which would cause spawn_food
-                // to early-return and leave the food at its stale eaten position.
-                // Additionally, only grow the cache — never shrink it. A smaller
-                // DrawRegion (e.g. from a layout probe) must not overwrite the
-                // cached size, otherwise tick() uses the shrunken bounds, the
-                // food lands outside the new rendering range, and the eating
-                // check can never fire.
-                let inner_w = w.saturating_sub(2);
-                let inner_h = h.saturating_sub(2);
-                if inner_w.saturating_mul(inner_h) >= 4 {
+                let h = pane_h.saturating_sub(3);
+                // Only cache when playable area is large enough. Only grow, never shrink.
+                if w.saturating_mul(h) >= 4 {
                     let cur_w = *self.last_board_w.borrow();
                     let cur_h = *self.last_board_h.borrow();
                     if w >= cur_w && h >= cur_h {
@@ -387,33 +392,30 @@ impl Element for SnekGame {
                         *self.last_board_h.borrow_mut() = h;
                     }
                 }
-                // Use the cached (logical) board dimensions for rendering so
-                // that the iteration range always covers the food position.
                 let cached_w = *self.last_board_w.borrow();
                 let cached_h = *self.last_board_h.borrow();
-                if cached_w > 0 && cached_h > 0 {
-                    (cached_w, cached_h, 0, 0)
-                } else {
-                    (w, h, 0, 0)
-                }
+                let bw = if cached_w > 0 { cached_w } else { w };
+                let bh = if cached_h > 0 { cached_h } else { h };
+                // Content starts 1 cell inside the Bordered border.
+                (bw, bh, 1, 1)
             }
             BoardSize::Fixed(w, h) => {
-                let bw = w + 2;
-                let bh = h + 2;
-                let ox = (pane_w.saturating_sub(bw)) / 2;
-                let oy = (pane_h.saturating_sub(bh)) / 2;
-                (w, h, ox, oy)
+                // Center the board within the Bordered inner area.
+                let inner_w = pane_w.saturating_sub(2);
+                let inner_h = pane_h.saturating_sub(2);
+                let ox = inner_w.saturating_sub(w) / 2;
+                let oy = inner_h.saturating_sub(h) / 2;
+                (w, h, 1 + ox, 1 + oy)
             }
         };
-
-        if pane_w < 4 || pane_h < 4 {
-            return Vec::new();
-        }
 
         // Initialize board on first draw with actual pane dimensions
         if !*self.board_initialized.borrow() {
             self.init_board(board_w, board_h);
         }
+
+        // Let Bordered draw its border, then layer game content on top.
+        let mut updates = self.bordered.drawing(ctx, dr, force_update);
 
         let mut chs = Vec::new();
         let theme = *self.ctrl_theme.borrow();
@@ -423,7 +425,6 @@ impl Element for SnekGame {
         let head_color = fg_style(theme.head_color());
         let body_color = fg_style(theme.body_color());
         let food_color = fg_style(theme.food_color());
-        let border_color = fg_style(Color::new(128, 128, 128));
         let default_style = Style {
             fg: None,
             bg: None,
@@ -431,112 +432,61 @@ impl Element for SnekGame {
             attr: Attributes::new(),
         };
 
-        let bl = border_x;
-        let br_ = border_x + board_w + 1;
-        let bt = border_y;
-        let bb = border_y + board_h + 1;
-
-        chs.push(DrawChPos::new(
-            DrawCh::new('┌', border_color.clone()),
-            bl as u16,
-            bt as u16,
-        ));
-        chs.push(DrawChPos::new(
-            DrawCh::new('┐', border_color.clone()),
-            br_ as u16,
-            bt as u16,
-        ));
-        chs.push(DrawChPos::new(
-            DrawCh::new('└', border_color.clone()),
-            bl as u16,
-            bb as u16,
-        ));
-        chs.push(DrawChPos::new(
-            DrawCh::new('┘', border_color.clone()),
-            br_ as u16,
-            bb as u16,
-        ));
-
-        for x in (bl + 1)..br_ {
-            chs.push(DrawChPos::new(
-                DrawCh::new('─', border_color.clone()),
-                x as u16,
-                bt as u16,
-            ));
-            chs.push(DrawChPos::new(
-                DrawCh::new('─', border_color.clone()),
-                x as u16,
-                bb as u16,
-            ));
-        }
-
-        for y in (bt + 1)..bb {
-            chs.push(DrawChPos::new(
-                DrawCh::new('│', border_color.clone()),
-                bl as u16,
-                y as u16,
-            ));
-            chs.push(DrawChPos::new(
-                DrawCh::new('│', border_color.clone()),
-                br_ as u16,
-                y as u16,
-            ));
-        }
-
-        let gx = border_x + 1;
-        let gy = border_y + 1;
         let state = *self.ctrl_state.borrow();
         let overlay_msgs: Option<Vec<String>> = match state {
-            GameState::Paused => Some(vec!["- snek -".into(), "(press an arrow key to start)".into()]),
+            GameState::Paused => Some(vec![
+                "- snek -".into(),
+                "(press an arrow key to start)".into(),
+            ]),
             GameState::GameOver => {
                 let score = *self.ctrl_score.borrow();
-                Some(vec!["- game over -".into(), format!("your score: {}", score)])
+                Some(vec![
+                    "- game over -".into(),
+                    format!("your score: {}", score),
+                ])
             }
             _ => None,
         };
-        if let Some(ref msgs) = overlay_msgs {
-            for y in 0..board_h {
-                for x in 0..board_w {
-                    let sx = gx + x;
-                    let sy = gy + y;
-                    let ch = if let Some((line_idx, char_idx)) = msgs.iter().enumerate().find_map(|(i, m)| {
-                        let line_y = board_h / 2 - 1 + i;
-                        let start_x = board_w.saturating_sub(m.len()) / 2;
-                        if y == line_y && x >= start_x && x < start_x + m.len() {
-                            Some((i, x - start_x))
-                        } else {
-                            None
-                        }
-                    }) {
-                        DrawCh::new(msgs[line_idx].as_bytes()[char_idx] as char, default_style.clone())
+
+        for y in 0..board_h {
+            for x in 0..board_w {
+                let sx = content_x + x;
+                let sy = content_y + y;
+                let ch = if let Some(ref msgs) = overlay_msgs {
+                    if let Some((line_idx, char_idx)) =
+                        msgs.iter().enumerate().find_map(|(i, m)| {
+                            let line_y = board_h / 2 - 1 + i;
+                            let start_x = board_w.saturating_sub(m.len()) / 2;
+                            if y == line_y && x >= start_x && x < start_x + m.len() {
+                                Some((i, x - start_x))
+                            } else {
+                                None
+                            }
+                        })
+                    {
+                        DrawCh::new(
+                            msgs[line_idx].as_bytes()[char_idx] as char,
+                            default_style.clone(),
+                        )
                     } else {
                         DrawCh::new(' ', default_style.clone())
-                    };
-                    chs.push(DrawChPos::new(ch, sx as u16, sy as u16));
-                }
-            }
-        } else {
-            for y in 0..board_h {
-                for x in 0..board_w {
-                    let sx = gx + x;
-                    let sy = gy + y;
-                    let ch = if snek[0] == (x, y) {
-                        DrawCh::new('◆', head_color.clone())
-                    } else if snek.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
-                        DrawCh::new('■', body_color.clone())
-                    } else if foods.iter().any(|f| !f.consumed && f.x == x && f.y == y) {
-                        DrawCh::new('🍎', food_color.clone())
-                    } else {
-                        DrawCh::new(' ', default_style.clone())
-                    };
-                    chs.push(DrawChPos::new(ch, sx as u16, sy as u16));
-                }
+                    }
+                } else if snek[0] == (x, y) {
+                    DrawCh::new('◆', head_color.clone())
+                } else if snek.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
+                    DrawCh::new('■', body_color.clone())
+                } else if foods.iter().any(|f| !f.consumed && f.x == x && f.y == y) {
+                    DrawCh::new('🍎', food_color.clone())
+                } else {
+                    DrawCh::new(' ', default_style.clone())
+                };
+                chs.push(DrawChPos::new(ch, sx as u16, sy as u16));
             }
         }
 
-        // Render score line below the board
-        let status_y = bb + 1;
-        if status_y < pane_h {
+        // Render score line below the board (last row of the pane).
+        let status_y = pane_h - 1;
+        if status_y > 0 {
             let score = *self.ctrl_score.borrow();
             let high = *self.ctrl_high_score.borrow();
             let status_str = format!("Score: {}  Best: {}", score, high);
@@ -550,79 +500,80 @@ impl Element for SnekGame {
             }
         }
 
-        DrawUpdate::update(chs).into()
+        updates.push(DrawUpdate::update(chs));
+        updates
     }
 
     fn get_attribute(&self, key: &str) -> Option<Vec<u8>> {
-        self.pane.get_attribute(key)
+        self.bordered.pane.get_attribute(key)
     }
 
     fn set_attribute_inner(&self, key: &str, value: Vec<u8>) {
-        self.pane.set_attribute_inner(key, value);
+        self.bordered.pane.set_attribute_inner(key, value);
     }
 
     fn set_parent(&self, parent: Box<dyn yeehaw::Parent>) {
-        self.pane.set_parent(parent);
+        self.bordered.pane.set_parent(parent);
     }
 
     fn set_hook(&self, kind: &str, el_id: ElementID, hook: yeehaw::ElementHookFn) {
-        self.pane.set_hook(kind, el_id, hook);
+        self.bordered.pane.set_hook(kind, el_id, hook);
     }
 
     fn remove_hook(&self, kind: &str, el_id: ElementID) {
-        self.pane.remove_hook(kind, el_id);
+        self.bordered.pane.remove_hook(kind, el_id);
     }
 
     fn clear_hooks_by_id(&self, el_id: ElementID) {
-        self.pane.clear_hooks_by_id(el_id);
+        self.bordered.pane.clear_hooks_by_id(el_id);
     }
 
     fn call_hooks_of_kind(&self, kind: &str) {
-        self.pane.call_hooks_of_kind(kind);
+        self.bordered.pane.call_hooks_of_kind(kind);
     }
 
     fn get_dyn_location_set(&self) -> Ref<'_, yeehaw::DynLocationSet> {
-        self.pane.get_dyn_location_set()
+        self.bordered.pane.get_dyn_location_set()
     }
 
     fn get_visible(&self) -> bool {
-        self.pane.get_visible()
+        self.bordered.pane.get_visible()
     }
 
     fn get_ref_cell_dyn_location_set(&self) -> Rc<RefCell<yeehaw::DynLocationSet>> {
-        self.pane.get_ref_cell_dyn_location_set()
+        self.bordered.pane.get_ref_cell_dyn_location_set()
     }
 
     fn get_ref_cell_visible(&self) -> Rc<RefCell<bool>> {
-        self.pane.get_ref_cell_visible()
+        self.bordered.pane.get_ref_cell_visible()
     }
 
     fn get_ref_cell_overflow(&self) -> Rc<RefCell<bool>> {
-        self.pane.get_ref_cell_overflow()
+        self.bordered.pane.get_ref_cell_overflow()
     }
 
     fn set_content_x_offset(&self, dr: Option<&DrawRegion>, x: usize) {
-        self.pane.set_content_x_offset(dr, x);
+        self.bordered.pane.set_content_x_offset(dr, x);
     }
 
     fn set_content_y_offset(&self, dr: Option<&DrawRegion>, y: usize) {
-        self.pane.set_content_y_offset(dr, y);
+        self.bordered.pane.set_content_y_offset(dr, y);
     }
 
     fn get_content_x_offset(&self) -> usize {
-        self.pane.get_content_x_offset()
+        self.bordered.pane.get_content_x_offset()
     }
 
     fn get_content_y_offset(&self) -> usize {
-        self.pane.get_content_y_offset()
+        self.bordered.pane.get_content_y_offset()
     }
 
     fn get_content_width(&self, dr: Option<&DrawRegion>) -> usize {
-        self.pane.get_content_width(dr)
+        self.bordered.pane.get_content_width(dr)
     }
 
     fn get_content_height(&self, dr: Option<&DrawRegion>) -> usize {
-        self.pane.get_content_height(dr)
+        self.bordered.pane.get_content_height(dr)
     }
 }
 
@@ -655,14 +606,17 @@ impl SnekGame {
     /// Test helper: replace all food with a single RedApple at the given position.
     pub fn spawn_food_at(&self, x: usize, y: usize) {
         self.foods.borrow_mut().clear();
-        self.foods.borrow_mut().push(Food { kind: FoodKind::RedApple, x, y, consumed: false });
+        self.foods.borrow_mut().push(Food {
+            kind: FoodKind::RedApple,
+            x,
+            y,
+            consumed: false,
+        });
     }
 
     /// Remove consumed food and spawn new food to reach target count.
     fn spawn_food(&self, bw: usize, bh: usize) {
-        let inner_w = bw.saturating_sub(2);
-        let inner_h = bh.saturating_sub(2);
-        if inner_w * inner_h < 4 {
+        if bw.saturating_mul(bh) < 4 {
             return;
         }
         let target = *self.ctrl_num_foods.borrow();
@@ -676,12 +630,13 @@ impl SnekGame {
         foods.retain(|f| !f.consumed);
 
         let snek = self.snek.borrow();
-        let occupied: std::collections::HashSet<_> = snek.iter()
+        let occupied: std::collections::HashSet<_> = snek
+            .iter()
             .copied()
             .chain(foods.iter().map(|f| (f.x, f.y)))
             .collect();
-        let free: Vec<_> = (1..=inner_w)
-            .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
+        let free: Vec<_> = (0..bw)
+            .flat_map(|x| (0..bh).map(move |y| (x, y)))
             .filter(|p| !occupied.contains(p))
             .collect();
         drop(snek);
@@ -694,7 +649,12 @@ impl SnekGame {
             }
             let idx = rng.gen_range(0..available.len());
             let pos = available.remove(idx);
-            foods.push(Food { kind: FoodKind::RedApple, x: pos.0, y: pos.1, consumed: false });
+            foods.push(Food {
+                kind: FoodKind::RedApple,
+                x: pos.0,
+                y: pos.1,
+                consumed: false,
+            });
         }
     }
 
@@ -763,11 +723,18 @@ impl SnekGame {
             Direction::Left => (hx.wrapping_sub(1), hy),
             Direction::Right => (hx.wrapping_add(1), hy),
         };
-        // Compute eating flag and drop foods borrow immediately
-        let eating = {
-            let foods = self.foods.borrow();
-            foods.iter().any(|f| !f.consumed && f.x == nx && f.y == ny)
-        };
+
+        let mut eating = false;
+        {
+            let mut foods = self.foods.borrow_mut();
+            for f in foods.iter_mut() {
+                if f.x == nx && f.y == ny && !f.consumed {
+                    f.consumed = true;
+                    eating = true;
+                    break;
+                }
+            }
+        }
 
         if nx >= bw || ny >= bh {
             drop(snek);
@@ -815,16 +782,6 @@ impl SnekGame {
             }
 
             drop(snek);
-            // Mark the eaten food as consumed and respawn
-            {
-                let mut foods = self.foods.borrow_mut();
-                for f in foods.iter_mut() {
-                    if f.x == nx && f.y == ny && !f.consumed {
-                        f.consumed = true;
-                        break;
-                    }
-                }
-            }
             self.spawn_food(bw, bh);
         } else {
             snek.pop();
