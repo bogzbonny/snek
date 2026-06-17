@@ -73,7 +73,6 @@ pub struct SnakeGame {
     snake: RefCell<Vec<(usize, usize)>>,
     direction: RefCell<Direction>,
     apple: RefCell<(usize, usize)>,
-    rec_evs: Rc<RefCell<ReceivableEvents>>,
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
     ctrl_board_size: Rc<RefCell<BoardSize>>,
@@ -121,12 +120,14 @@ impl SnakeGame {
             rec_evs.push(ReceivableEvent::from(key));
         }
 
+        let pane = Pane::new(ctx, "snake_game");
+        pane.set_focused_receivable_events(rec_evs);
+
         let game = SnakeGame {
-            pane: Pane::new(ctx, "snake_game"),
+            pane,
             snake: RefCell::new(Vec::new()),
             direction: RefCell::new(Direction::Right),
             apple: RefCell::new((0, 0)),
-            rec_evs: Rc::new(RefCell::new(rec_evs)),
             // Shared state
             ctrl_tick_interval: ctrl.tick_interval.clone(),
             ctrl_board_size: ctrl.board_size.clone(),
@@ -234,11 +235,11 @@ impl Element for SnakeGame {
     }
 
     fn can_receive(&self, ev: &Event) -> bool {
-        self.rec_evs.borrow().contains_match(ev)
+        self.pane.can_receive(ev)
     }
 
     fn receivable(&self) -> Vec<Rc<RefCell<ReceivableEvents>>> {
-        vec![self.rec_evs.clone()]
+        self.pane.receivable()
     }
 
     fn receive_event(&self, ctx: &Context, ev: Event) -> (bool, EventResponses) {

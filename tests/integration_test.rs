@@ -219,3 +219,159 @@ fn test_h_key_from_paused_causes_game_over() {
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
     assert_eq!(game.state(), GameState::GameOver, "pressing Left should cause self-collision");
 }
+
+// ============================================================================
+// Focus gating tests — verify can_receive() respects focus (yeehaw Pane integration)
+// ============================================================================
+
+#[test]
+fn test_can_receive_when_focused() {
+    let (game, _, _) = make_initialized_game();
+    game.set_focused(true);
+
+    for &key in &[
+        Keyboard::KEY_H,
+        Keyboard::KEY_J,
+        Keyboard::KEY_K,
+        Keyboard::KEY_L,
+        Keyboard::KEY_LEFT,
+        Keyboard::KEY_RIGHT,
+        Keyboard::KEY_UP,
+        Keyboard::KEY_DOWN,
+        Keyboard::KEY_SPACE,
+        Keyboard::KEY_Q,
+    ] {
+        assert!(
+            game.can_receive(&Event::KeyCombo(vec![key])),
+            "focused game must accept {key:?}",
+        );
+    }
+}
+
+#[test]
+fn test_can_receive_rejects_unregistered_keys() {
+    let (game, _, _) = make_initialized_game();
+    game.set_focused(true);
+
+    let a_key = crossterm::event::KeyEvent::new(
+        crossterm::event::KeyCode::Char('a'),
+        crossterm::event::KeyModifiers::NONE,
+    );
+    assert!(
+        !game.can_receive(&Event::KeyCombo(vec![a_key])),
+        "game must reject unregistered key 'a'",
+    );
+}
+
+#[test]
+fn test_can_receive_blocks_when_unfocused() {
+    // Before the fix: can_receive ignored focus and always matched.
+    // After the fix: can_receive delegates to Pane which gates on focus.
+    let (game, _, _) = make_initialized_game();
+    game.set_focused(false);
+
+    for &key in &[
+        Keyboard::KEY_H,
+        Keyboard::KEY_J,
+        Keyboard::KEY_K,
+        Keyboard::KEY_L,
+        Keyboard::KEY_LEFT,
+        Keyboard::KEY_RIGHT,
+        Keyboard::KEY_UP,
+        Keyboard::KEY_DOWN,
+        Keyboard::KEY_SPACE,
+    ] {
+        assert!(
+            !game.can_receive(&Event::KeyCombo(vec![key])),
+            "unfocused game must reject {key:?}",
+        );
+    }
+}
+
+#[test]
+fn test_receivable_exposes_events_when_focused() {
+    let (game, _, _) = make_initialized_game();
+    game.set_focused(true);
+
+    let rec = game.receivable();
+    assert!(!rec.is_empty(), "focused game must expose receivable events");
+
+    // At least one receivable bucket must match KEY_K
+    let key_ev = Event::KeyCombo(vec![Keyboard::KEY_K]);
+    let any_match = rec.iter().any(|bucket| {
+        let b = bucket.borrow();
+        b.contains_match(&key_ev)
+    });
+    assert!(any_match, "focused game's receivable must contain KEY_K");
+}
+
+#[test]
+fn test_receivable_empty_when_unfocused() {
+    // When unfocused, Pane::receivable() returns only "always" bucket.
+    // SnakeGame registers all events as "focused" — so unfocused should be empty.
+    let (game, _, _) = make_initialized_game();
+    game.set_focused(false);
+
+    let rec = game.receivable();
+    // The "always" bucket is empty (we only set focused events)
+    let key_ev = Event::KeyCombo(vec![Keyboard::KEY_K]);
+    let any_match = rec.iter().any(|bucket| {
+        let b = bucket.borrow();
+        b.contains_match(&key_ev)
+    });
+    assert!(
+        !any_match,
+        "unfocused game's receivable must NOT contain direction keys",
+    );
+}
+
+// ============================================================================
+// Full tick cycle test — direction change + tick moves the snake
+// ============================================================================
+
+#[test]
+fn test_direction_change_then_tick_moves_snake() {
+    // Start from Paused, press K to start + set Up, then tick again to verify
+    // the snake continues moving in the new direction.
+    let (game, _, ctx) = make_initialized_game();
+    // State is Paused, board is initialized.
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
+    // Now Running, direction=Up, snake moved once (head at 10,4).
+    assert_eq!(game.state(), GameState::Running);
+    assert_eq!(game.direction(), Direction::Up);
+    let after_first_move = game.snake().clone();
+    assert_eq!(after_first_move[0], (10, 4), "first move should be Up");
+
+    // Tick again — snake should move Up again.
+    game.tick(&ctx);
+    let after_second_move = game.snake().clone();
+    assert_eq!(
+        after_second_move[0],
+        (10, 3),
+        "second tick should move Up again"
+    );
+}
+
+#[test]
+fn test_direction_change_while_running_then_tick() {
+    // Start game, change direction, tick — verify the position reflects new direction.
+    let (game, _, ctx) = make_initialized_game();
+    // Start moving Up.
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
+    assert_eq!(game.direction(), Direction::Up);
+    assert_eq!(game.snake()[0], (10, 4));
+
+    // Change to Left while Running.
+    game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
+    assert_eq!(game.direction(), Direction::Left);
+    // Snake hasn't moved yet — only direction changed.
+    assert_eq!(game.snake()[0], (10, 4), "direction change alone should not move");
+
+    // Now tick — snake should move Left.
+    game.tick(&ctx);
+    assert_eq!(
+        game.snake()[0],
+        (9, 4),
+        "tick after direction change should move in new direction"
+    );
+}
