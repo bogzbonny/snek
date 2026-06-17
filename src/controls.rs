@@ -136,8 +136,16 @@ pub fn build_control_bar(
         }
     }
 
-    width_tb.tb.set_dyn_width(DynVal::new_fixed(4));
-    height_tb.tb.set_dyn_width(DynVal::new_fixed(4));
+    {
+        let mut loc = width_tb.get_dyn_location_set().clone();
+        loc.set_dyn_width(DynVal::new_fixed(4));
+        width_tb.set_dyn_location_set(loc);
+    }
+    {
+        let mut loc = height_tb.get_dyn_location_set().clone();
+        loc.set_dyn_width(DynVal::new_fixed(4));
+        height_tb.set_dyn_location_set(loc);
+    }
 
     // Width textbox hook
     {
