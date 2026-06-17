@@ -35,13 +35,8 @@ pub enum GameState {
     GameOver,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub enum Theme {
-    Classic,
-    Neon,
-    Amber,
-}
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub struct Theme;
 
 /// Kind of food item on the board.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -79,28 +74,16 @@ impl Default for Food {
 }
 
 impl Theme {
-    pub fn head_color(self) -> Color {
-        match self {
-            Theme::Classic => Color::new(0, 255, 0),
-            Theme::Neon => Color::new(0, 255, 255),
-            Theme::Amber => Color::new(255, 191, 0),
-        }
+    pub fn head_color() -> Color {
+        Color::new(0, 255, 0)
     }
 
-    pub fn body_color(self) -> Color {
-        match self {
-            Theme::Classic => Color::new(0, 128, 0),
-            Theme::Neon => Color::new(0, 128, 128),
-            Theme::Amber => Color::new(165, 120, 0),
-        }
+    pub fn body_color() -> Color {
+        Color::new(0, 128, 0)
     }
 
-    pub fn food_color(self) -> Color {
-        match self {
-            Theme::Classic => Color::new(255, 0, 0),
-            Theme::Neon => Color::new(255, 0, 255),
-            Theme::Amber => Color::new(255, 100, 100),
-        }
+    pub fn food_color() -> Color {
+        Color::new(255, 0, 0)
     }
 }
 
@@ -113,7 +96,6 @@ pub struct SnekGame {
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
     ctrl_board_size: Rc<RefCell<BoardSize>>,
-    ctrl_theme: Rc<RefCell<Theme>>,
     ctrl_score: Rc<RefCell<usize>>,
     ctrl_high_score: Rc<RefCell<usize>>,
     ctrl_state: Rc<RefCell<GameState>>,
@@ -169,7 +151,6 @@ impl SnekGame {
             // Shared state
             ctrl_tick_interval: ctrl.tick_interval.clone(),
             ctrl_board_size: ctrl.board_size.clone(),
-            ctrl_theme: ctrl.theme.clone(),
             ctrl_score: ctrl.score.clone(),
             ctrl_high_score: ctrl.high_score.clone(),
             ctrl_state: ctrl.state.clone(),
@@ -239,10 +220,6 @@ impl SnekGame {
 
     pub fn board_size(&self) -> BoardSize {
         *self.ctrl_board_size.borrow()
-    }
-
-    pub fn theme(&self) -> Theme {
-        *self.ctrl_theme.borrow()
     }
 
     pub fn set_direction(&self, dir: Direction) {
@@ -440,13 +417,12 @@ impl Element for SnekGame {
         let mut updates = Vec::new();
 
         let mut chs = Vec::new();
-        let theme = *self.ctrl_theme.borrow();
         let snek = self.snek.borrow();
         let foods = self.foods.borrow();
 
-        let head_color = fg_style(theme.head_color());
-        let body_color = fg_style(theme.body_color());
-        let food_color = fg_style(theme.food_color());
+        let head_color = fg_style(Theme::head_color());
+        let body_color = fg_style(Theme::body_color());
+        let food_color = fg_style(Theme::food_color());
         let default_style = Style {
             fg: None,
             bg: None,
@@ -776,13 +752,8 @@ impl SnekGame {
                     BoardSize::Auto => "Auto".to_string(),
                     BoardSize::Fixed(w, h) => format!("{}x{}", w, h),
                 };
-                let theme = match *self.ctrl_theme.borrow() {
-                    Theme::Classic => "Classic",
-                    Theme::Neon => "Neon",
-                    Theme::Amber => "Amber",
-                };
                 let num_foods = *self.ctrl_num_foods.borrow();
-                Config::save_values(speed_ms, &board_size, theme, new_score, num_foods);
+                Config::save_values(speed_ms, &board_size, new_score, num_foods);
             }
 
             drop(snek);
