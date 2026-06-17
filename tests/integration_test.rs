@@ -27,6 +27,29 @@ fn make_initialized_game() -> (SnakeGame, ControlState, yeehaw::Context) {
     (game, ctrl, ctx)
 }
 
+/// Verify that when multiple apples are spawned, no two occupy the same cell.
+#[test]
+fn test_apples_never_overlap() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::for_test();
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(40, 20);
+    *ctrl.num_apples.borrow_mut() = 50;
+
+    for _i in 0..100 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let apples = game.apples();
+        let unique: std::collections::HashSet<_> = apples.iter().collect();
+        assert_eq!(
+            unique.len(),
+            apples.len(),
+            "apples must not overlap: {} total vs {} unique",
+            apples.len(),
+            unique.len()
+        );
+    }
+}
+
 #[test]
 fn test_initial_state_is_paused() {
     let (game, _, _) = make_game();
