@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     {
         let mut loc = control_bar.get_dyn_location_set().clone();
-        loc.set_dyn_height(DynVal::new_fixed(1));
+        loc.set_dyn_height(DynVal::new_fixed(2));
         control_bar.set_dyn_location_set(loc);
     }
     stack.push(control_bar);
