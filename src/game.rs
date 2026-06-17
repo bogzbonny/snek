@@ -546,14 +546,24 @@ impl SnakeGame {
     }
 
     fn spawn_apple(&self, bw: usize, bh: usize) {
+        // Board must be at least 3×3 to have an inner spawn area (border excluded).
+        if bw < 3 || bh < 3 {
+            return;
+        }
         let snake = self.snake.borrow();
-        // Guard: if snake fills the board, no empty cell exists — avoid infinite loop.
-        if snake.len() >= bw * bh {
+        // Count snake segments within the inner area to guard against infinite loop.
+        let inner_w = bw - 2;
+        let inner_h = bh - 2;
+        let occupied = snake
+            .iter()
+            .filter(|&&(sx, sy)| sx > 0 && sx < bw - 1 && sy > 0 && sy < bh - 1)
+            .count();
+        if occupied >= inner_w * inner_h {
             return;
         }
         loop {
-            let rx = rand::thread_rng().gen_range(0..bw);
-            let ry = rand::thread_rng().gen_range(0..bh);
+            let rx = 1 + rand::thread_rng().gen_range(0..inner_w);
+            let ry = 1 + rand::thread_rng().gen_range(0..inner_h);
             if !snake.iter().any(|&(sx, sy)| sx == rx && sy == ry) {
                 *self.apple.borrow_mut() = (rx, ry);
                 break;

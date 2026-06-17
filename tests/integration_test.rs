@@ -901,3 +901,60 @@ fn test_main_loop_pattern_clone_tick_works() {
     assert_eq!(snake[0], (15, 5), "original game must see snake movement from clone tick");
     assert_eq!(snake.len(), 3, "snake length should be unchanged without eating");
 }
+
+/// Apples must never spawn on the border (outermost row/column of the playable area).
+/// Border cells for a bw×bh board: x=0, x=bw-1, y=0, y=bh-1.
+fn is_on_border(apple: (usize, usize), bw: usize, bh: usize) -> bool {
+    let (ax, ay) = apple;
+    ax == 0 || ax == bw - 1 || ay == 0 || ay == bh - 1
+}
+
+#[test]
+fn test_apple_not_on_border_after_init() {
+    let (game, _, _) = make_initialized_game();
+    // Board is 20×10; border cells are x=0, x=19, y=0, y=9
+    let apple = game.apple();
+    assert!(
+        !is_on_border(apple, 20, 10),
+        "apple {:?} must not be on the border of a 20×10 board",
+        apple
+    );
+}
+
+#[test]
+fn test_apple_not_on_border_after_many_restarts() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+
+    for i in 0..100 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let apple = game.apple();
+        assert!(
+            !is_on_border(apple, 20, 10),
+            "restart {}: apple {:?} must not be on the border of a 20×10 board",
+            i,
+            apple
+        );
+    }
+}
+
+#[test]
+fn test_apple_not_on_border_small_board() {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(10, 8);
+
+    for i in 0..100 {
+        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        game.restart();
+        let apple = game.apple();
+        assert!(
+            !is_on_border(apple, 10, 8),
+            "restart {}: apple {:?} must not be on the border of a 10×8 board",
+            i,
+            apple
+        );
+    }
+}
