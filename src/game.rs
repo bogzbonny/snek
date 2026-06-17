@@ -49,7 +49,7 @@ pub enum FoodKind {
     RedApple,
 }
 
-/// A food item the snake can consume.
+/// A food item the snek can consume.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Food {
     pub kind: FoodKind,
@@ -85,9 +85,9 @@ impl Theme {
 }
 
 #[derive(Clone)]
-pub struct SnakeGame {
+pub struct SnekGame {
     pane: Pane,
-    snake: Rc<RefCell<Vec<(usize, usize)>>>,
+    snek: Rc<RefCell<Vec<(usize, usize)>>>,
     direction: Rc<RefCell<Direction>>,
     apples: Rc<RefCell<Vec<Food>>>,
     // Shared state refs — bidirectional sync with control bar
@@ -119,7 +119,7 @@ fn fg_style(color: Color) -> Style {
 }
 
 #[allow(dead_code)]
-impl SnakeGame {
+impl SnekGame {
     pub fn new(ctx: &Context, ctrl: &ControlState) -> Self {
         let mut rec_evs = ReceivableEvents::default();
         for &key in &[
@@ -137,13 +137,13 @@ impl SnakeGame {
             rec_evs.push(ReceivableEvent::from(key));
         }
 
-        let pane = Pane::new(ctx, "snake_game");
+        let pane = Pane::new(ctx, "snek_game");
         pane.set_focused_receivable_events(rec_evs);
         pane.set_focused(true);
 
-        let game = SnakeGame {
+        let game = SnekGame {
             pane,
-            snake: Rc::new(RefCell::new(Vec::new())),
+            snek: Rc::new(RefCell::new(Vec::new())),
             direction: Rc::new(RefCell::new(Direction::Right)),
             apples: Rc::new(RefCell::new(Vec::new())),
             // Shared state
@@ -167,8 +167,8 @@ impl SnakeGame {
         &self.pane
     }
 
-    pub fn snake(&self) -> Vec<(usize, usize)> {
-        self.snake.borrow().clone()
+    pub fn snek(&self) -> Vec<(usize, usize)> {
+        self.snek.borrow().clone()
     }
 
     pub fn direction(&self) -> Direction {
@@ -220,7 +220,7 @@ impl SnakeGame {
         self.direction_queue.borrow_mut().clear();
     }
 
-    /// Initialize snake, apple and score for the given board dimensions.
+    /// Initialize snek, apple and score for the given board dimensions.
     fn init_board(&self, bw: usize, bh: usize) {
         // Guard: inner spawn area must be large enough for an apple.
         // If too small, leave board_initialized=false so the next
@@ -233,12 +233,12 @@ impl SnakeGame {
 
         let cx = bw / 2;
         let cy = bh / 2;
-        let snake = vec![
+        let snek = vec![
             (cx, cy),
             (cx.saturating_sub(1), cy),
             (cx.saturating_sub(2), cy),
         ];
-        *self.snake.borrow_mut() = snake;
+        *self.snek.borrow_mut() = snek;
         *self.direction.borrow_mut() = Direction::Right;
         *self.ctrl_score.borrow_mut() = 0;
         self.apples.borrow_mut().clear();
@@ -247,9 +247,9 @@ impl SnakeGame {
     }
 }
 
-impl Element for SnakeGame {
+impl Element for SnekGame {
     fn kind(&self) -> &'static str {
-        "snake_game"
+        "snek_game"
     }
 
     fn id(&self) -> ElementID {
@@ -323,7 +323,7 @@ impl Element for SnakeGame {
                         }
                     }
                     *self.ctrl_state.borrow_mut() = GameState::Running;
-                    // Move snake immediately on first direction key press.
+                    // Move snek immediately on first direction key press.
                     if is_dir_key(key) {
                         self.tick(ctx);
                     }
@@ -417,7 +417,7 @@ impl Element for SnakeGame {
 
         let mut chs = Vec::new();
         let theme = *self.ctrl_theme.borrow();
-        let snake = self.snake.borrow();
+        let snek = self.snek.borrow();
         let apples = self.apples.borrow();
 
         let head_color = fg_style(theme.head_color());
@@ -487,7 +487,7 @@ impl Element for SnakeGame {
         let gy = border_y + 1;
         let state = *self.ctrl_state.borrow();
         let overlay_msgs: Option<Vec<String>> = match state {
-            GameState::Paused => Some(vec!["- snake -".into(), "(press an arrow key to start)".into()]),
+            GameState::Paused => Some(vec!["- snek -".into(), "(press an arrow key to start)".into()]),
             GameState::GameOver => {
                 let score = *self.ctrl_score.borrow();
                 Some(vec!["- game over -".into(), format!("your score: {}", score)])
@@ -520,9 +520,9 @@ impl Element for SnakeGame {
                 for x in 0..board_w {
                     let sx = gx + x;
                     let sy = gy + y;
-                    let ch = if snake[0] == (x, y) {
+                    let ch = if snek[0] == (x, y) {
                         DrawCh::new('◆', head_color.clone())
-                    } else if snake.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
+                    } else if snek.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
                         DrawCh::new('■', body_color.clone())
                     } else if apples.iter().any(|f| !f.consumed && f.x == x && f.y == y) {
                         DrawCh::new('🍎', apple_color.clone())
@@ -627,7 +627,7 @@ impl Element for SnakeGame {
 }
 
 #[allow(dead_code)]
-impl SnakeGame {
+impl SnekGame {
     fn handle_direction(&self, key: KeyEvent) {
         let new_dir = if key == Keyboard::KEY_K || key == Keyboard::KEY_UP {
             Direction::Up
@@ -675,8 +675,8 @@ impl SnakeGame {
         // Remove consumed food
         apples.retain(|f| !f.consumed);
 
-        let snake = self.snake.borrow();
-        let occupied: std::collections::HashSet<_> = snake.iter()
+        let snek = self.snek.borrow();
+        let occupied: std::collections::HashSet<_> = snek.iter()
             .copied()
             .chain(apples.iter().map(|f| (f.x, f.y)))
             .collect();
@@ -684,7 +684,7 @@ impl SnakeGame {
             .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
             .filter(|p| !occupied.contains(p))
             .collect();
-        drop(snake);
+        drop(snek);
         let mut rng = rand::thread_rng();
         let needed = target.saturating_sub(apples.len());
         let mut available = free;
@@ -740,7 +740,7 @@ impl SnakeGame {
             }
         }
 
-        // Detect board size change mid-game; restart to reposition snake/apple
+        // Detect board size change mid-game; restart to reposition snek/apple
         let new_board_size = *self.ctrl_board_size.borrow();
         if new_board_size != *self.last_board_size.borrow() {
             *self.last_board_size.borrow_mut() = new_board_size;
@@ -753,8 +753,8 @@ impl SnakeGame {
             BoardSize::Fixed(w, h) => (w, h),
             BoardSize::Auto => (*self.last_board_w.borrow(), *self.last_board_h.borrow()),
         };
-        let mut snake = self.snake.borrow_mut();
-        let (hx, hy) = snake[0];
+        let mut snek = self.snek.borrow_mut();
+        let (hx, hy) = snek[0];
 
         // Consistent wrapping arithmetic for all directions; bounds check catches OOB.
         let (nx, ny) = match dir {
@@ -770,29 +770,29 @@ impl SnakeGame {
         };
 
         if nx >= bw || ny >= bh {
-            drop(snake);
+            drop(snek);
             *self.ctrl_state.borrow_mut() = GameState::GameOver;
             return;
         }
 
         // Exclude tail from collision check when not eating: the tail will move away.
         let segments_to_check = if eating {
-            snake.len()
+            snek.len()
         } else {
-            snake.len().saturating_sub(1)
+            snek.len().saturating_sub(1)
         };
-        if snake
+        if snek
             .iter()
             .take(segments_to_check)
             .any(|&(sx, sy)| sx == nx && sy == ny)
         {
-            drop(snake);
+            drop(snek);
             *self.ctrl_state.borrow_mut() = GameState::GameOver;
             return;
         }
 
         if eating {
-            snake.insert(0, (nx, ny));
+            snek.insert(0, (nx, ny));
 
             let new_score = {
                 *self.ctrl_score.borrow_mut() += 1;
@@ -814,7 +814,7 @@ impl SnakeGame {
                 Config::save_values(speed_ms, &board_size, theme, new_score, num_apples);
             }
 
-            drop(snake);
+            drop(snek);
             // Mark the eaten food as consumed and respawn
             {
                 let mut foods = self.apples.borrow_mut();
@@ -827,8 +827,8 @@ impl SnakeGame {
             }
             self.spawn_apple(bw, bh);
         } else {
-            snake.pop();
-            snake.insert(0, (nx, ny));
+            snek.pop();
+            snek.insert(0, (nx, ny));
         }
     }
 }

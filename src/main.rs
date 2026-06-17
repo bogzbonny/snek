@@ -12,7 +12,7 @@ pub mod config;
 mod tests;
 
 use controls::{build_control_bar, ControlState};
-use game::SnakeGame;
+use game::SnekGame;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = ControlState::new(&ctx);
     let tick_interval = state.tick_interval.clone();
 
-    let game = SnakeGame::new(&ctx, &state);
+    let game = SnekGame::new(&ctx, &state);
     game.set_focused(true);
     let tick_game = game.clone();
     let restart_game = game.clone();

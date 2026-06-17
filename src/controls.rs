@@ -12,7 +12,7 @@ use yeehaw::{
 use crate::config::Config;
 use crate::game::{BoardSize, GameState, Theme};
 
-/// Shared state between controls bar and SnakeGame for bidirectional communication.
+/// Shared state between controls bar and SnekGame for bidirectional communication.
 pub struct ControlState {
     pub tick_interval: Rc<RefCell<Duration>>,
     pub board_size: Rc<RefCell<BoardSize>>,
