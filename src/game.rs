@@ -72,7 +72,7 @@ pub struct SnakeGame {
     pane: Pane,
     snake: Rc<RefCell<Vec<(usize, usize)>>>,
     direction: Rc<RefCell<Direction>>,
-    apple: RefCell<(usize, usize)>,
+    apple: Rc<RefCell<(usize, usize)>>,
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
     ctrl_board_size: Rc<RefCell<BoardSize>>,
@@ -83,13 +83,13 @@ pub struct SnakeGame {
     ctrl_score_label: Rc<Label>,
     ctrl_high_score_label: Rc<Label>,
     ctrl_status_label: Rc<Label>,
-    // Last-known board dimensions for Auto mode
-    last_board_w: RefCell<usize>,
-    last_board_h: RefCell<usize>,
-    // True after board has been initialized with valid dimensions
-    board_initialized: RefCell<bool>,
-    // Track board size to detect mid-game changes
-    last_board_size: RefCell<BoardSize>,
+    // Last-known board dimensions for Auto mode (Rc so clones share state with original)
+    last_board_w: Rc<RefCell<usize>>,
+    last_board_h: Rc<RefCell<usize>>,
+    // True after board has been initialized with valid dimensions (Rc so clones share)
+    board_initialized: Rc<RefCell<bool>>,
+    // Track board size to detect mid-game changes (Rc so clones share)
+    last_board_size: Rc<RefCell<BoardSize>>,
 }
 
 fn fg_style(color: Color) -> Style {
@@ -128,7 +128,7 @@ impl SnakeGame {
             pane,
             snake: Rc::new(RefCell::new(Vec::new())),
             direction: Rc::new(RefCell::new(Direction::Right)),
-            apple: RefCell::new((0, 0)),
+            apple: Rc::new(RefCell::new((0, 0))),
             // Shared state
             ctrl_tick_interval: ctrl.tick_interval.clone(),
             ctrl_board_size: ctrl.board_size.clone(),
@@ -139,10 +139,10 @@ impl SnakeGame {
             ctrl_score_label: ctrl.score_label.clone(),
             ctrl_high_score_label: ctrl.high_score_label.clone(),
             ctrl_status_label: ctrl.status_label.clone(),
-            last_board_w: RefCell::new(0),
-            last_board_h: RefCell::new(0),
-            board_initialized: RefCell::new(false),
-            last_board_size: RefCell::new(*ctrl.board_size.borrow()),
+            last_board_w: Rc::new(RefCell::new(0)),
+            last_board_h: Rc::new(RefCell::new(0)),
+            board_initialized: Rc::new(RefCell::new(false)),
+            last_board_size: Rc::new(RefCell::new(*ctrl.board_size.borrow())),
         };
         game
     }
@@ -574,7 +574,7 @@ impl SnakeGame {
             *self.ctrl_score.borrow_mut() = 0;
             self.sync_score_labels();
         }
-        *self.ctrl_state.borrow_mut() = GameState::Running;
+        *self.ctrl_state.borrow_mut() = GameState::Paused;
         self.sync_status_label();
     }
 
