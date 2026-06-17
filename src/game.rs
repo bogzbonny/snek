@@ -10,6 +10,7 @@ use yeehaw::{
     ReceivableEvents, Ref, Style,
 };
 
+use crate::config::Config;
 use crate::controls::ControlState;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -721,6 +722,18 @@ impl SnakeGame {
             };
             if new_score > *self.ctrl_high_score.borrow() {
                 *self.ctrl_high_score.borrow_mut() = new_score;
+                // Save config when highscore changes
+                let speed_ms = self.ctrl_tick_interval.borrow().as_millis() as u64;
+                let board_size = match *self.ctrl_board_size.borrow() {
+                    BoardSize::Auto => "Auto".to_string(),
+                    BoardSize::Fixed(w, h) => format!("{}x{}", w, h),
+                };
+                let theme = match *self.ctrl_theme.borrow() {
+                    Theme::Classic => "Classic",
+                    Theme::Neon => "Neon",
+                    Theme::Amber => "Amber",
+                };
+                Config::save_values(speed_ms, &board_size, theme, new_score);
             }
             self.sync_score_labels();
 

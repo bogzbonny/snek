@@ -10,6 +10,7 @@ use yeehaw::{
     Ref, Slider,
 };
 
+use crate::config::Config;
 use crate::game::{BoardSize, GameState, Theme};
 
 /// Wrapper that holds an Rc<Label> and delegates all Element methods to the inner Label.
@@ -120,15 +121,38 @@ pub struct ControlState {
 
 impl ControlState {
     pub fn new(ctx: &Context) -> Self {
+        let cfg = Config::load();
+
+        let board_size = match cfg.board_size.as_str() {
+            "Auto" => BoardSize::Auto,
+            s => {
+                if let Some((w_str, h_str)) = s.split_once('x') {
+                    if let (Ok(w), Ok(h)) = (w_str.parse::<usize>(), h_str.parse::<usize>()) {
+                        BoardSize::Fixed(w, h)
+                    } else {
+                        BoardSize::Auto
+                    }
+                } else {
+                    BoardSize::Auto
+                }
+            }
+        };
+
+        let theme = match cfg.theme.as_str() {
+            "Neon" => Theme::Neon,
+            "Amber" => Theme::Amber,
+            _ => Theme::Classic,
+        };
+
         Self {
-            tick_interval: Rc::new(RefCell::new(Duration::from_millis(26))),
-            board_size: Rc::new(RefCell::new(BoardSize::Auto)),
-            theme: Rc::new(RefCell::new(Theme::Classic)),
+            tick_interval: Rc::new(RefCell::new(Duration::from_millis(cfg.speed_ms.max(2)))),
+            board_size: Rc::new(RefCell::new(board_size)),
+            theme: Rc::new(RefCell::new(theme)),
             score: Rc::new(RefCell::new(0)),
-            high_score: Rc::new(RefCell::new(0)),
+            high_score: Rc::new(RefCell::new(cfg.high_score)),
             state: Rc::new(RefCell::new(GameState::Paused)),
             score_label: Rc::new(Label::new(ctx, "Score: 0")),
-            high_score_label: Rc::new(Label::new(ctx, "Best: 0")),
+            high_score_label: Rc::new(Label::new(ctx, &format!("Best: {}", cfg.high_score))),
             status_label: Rc::new(Label::new(ctx, "Paused")),
         }
     }
@@ -150,17 +174,24 @@ pub fn build_control_bar(
     let slider = Slider::new_basic_line(ctx);
     *slider.position.borrow_mut() = 0.5;
     let tick_interval = state.tick_interval.clone();
+    let board_size = state.board_size.clone();
+    let theme = state.theme.clone();
+    let high_score = state.high_score.clone();
     *slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 50ms..=2.5ms
         let ms = (50.0 - pos * 47.5) as u64;
         *tick_interval.borrow_mut() = Duration::from_millis(ms);
+        Config::save_values(ms, &board_size_to_str(&board_size.borrow()), theme_to_str(&theme.borrow()), *high_score.borrow());
         EventResponses::default()
     });
     stack.push(Box::new(slider));
 
     // --- Board size dropdown ---
     let board_size = state.board_size.clone();
+    let tick_interval = state.tick_interval.clone();
+    let theme = state.theme.clone();
+    let high_score = state.high_score.clone();
     let size_dropdown = DropdownList::new(
         ctx,
         vec!["Auto", "20x10", "30x15", "40x20", "50x25", "60x30"],
@@ -175,6 +206,7 @@ pub fn build_control_bar(
                 _ => BoardSize::Auto,
             };
             *board_size.borrow_mut() = bs;
+            Config::save_values(tick_interval.borrow().as_millis() as u64, &board_size_to_str(&board_size.borrow()), theme_to_str(&theme.borrow()), *high_score.borrow());
             EventResponses::default()
         }),
     );
@@ -182,6 +214,9 @@ pub fn build_control_bar(
 
     // --- Theme dropdown ---
     let theme = state.theme.clone();
+    let tick_interval = state.tick_interval.clone();
+    let board_size = state.board_size.clone();
+    let high_score = state.high_score.clone();
     let theme_dropdown = DropdownList::new(
         ctx,
         vec!["Classic", "Neon", "Amber"],
@@ -193,6 +228,7 @@ pub fn build_control_bar(
                 _ => Theme::Classic,
             };
             *theme.borrow_mut() = t;
+            Config::save_values(tick_interval.borrow().as_millis() as u64, &board_size_to_str(&board_size.borrow()), theme_to_str(&theme.borrow()), *high_score.borrow());
             EventResponses::default()
         }),
     );
@@ -223,4 +259,19 @@ pub fn build_control_bar(
     stack.push(Box::new(quit_btn));
 
     Box::new(stack)
+}
+
+fn board_size_to_str(bs: &BoardSize) -> String {
+    match bs {
+        BoardSize::Auto => "Auto".to_string(),
+        BoardSize::Fixed(w, h) => format!("{}x{}", w, h),
+    }
+}
+
+fn theme_to_str(t: &Theme) -> &'static str {
+    match t {
+        Theme::Classic => "Classic",
+        Theme::Neon => "Neon",
+        Theme::Amber => "Amber",
+    }
 }

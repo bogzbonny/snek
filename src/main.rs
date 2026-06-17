@@ -7,6 +7,7 @@ use yeehaw::{DynVal, Element, ParentPane, Tui, VerticalStack};
 mod controls;
 mod game;
 
+use snek::config;
 use controls::{build_control_bar, ControlState};
 use game::SnakeGame;
 

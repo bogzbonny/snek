@@ -1,0 +1,61 @@
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+
+#[derive(Serialize, Deserialize)]
+pub struct Config {
+    pub speed_ms: u64,
+    pub board_size: String,
+    pub theme: String,
+    pub high_score: usize,
+}
+
+impl Config {
+    fn default_config() -> Self {
+        Self {
+            speed_ms: 26,
+            board_size: "Auto".to_string(),
+            theme: "Classic".to_string(),
+            high_score: 0,
+        }
+    }
+
+    pub fn load() -> Self {
+        let path = Self::config_path();
+        if let Ok(contents) = fs::read_to_string(&path) {
+            if let Ok(config) = toml::from_str::<Self>(&contents) {
+                return config;
+            }
+        }
+        Self::default_config()
+    }
+
+    pub fn save(&self) {
+        let path = Self::config_path();
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if let Ok(contents) = toml::to_string(self) {
+            let _ = fs::write(&path, contents);
+        }
+    }
+
+    /// Save config from individual values.
+    pub fn save_values(speed_ms: u64, board_size: &str, theme: &str, high_score: usize) {
+        Self {
+            speed_ms,
+            board_size: board_size.to_string(),
+            theme: theme.to_string(),
+            high_score,
+        }
+        .save();
+    }
+
+    fn config_path() -> PathBuf {
+        let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        path.push(".config");
+        path.push("snek");
+        path.push("config.toml");
+        path
+    }
+}
