@@ -203,6 +203,24 @@ impl SnekGame {
         self.foods.borrow().clone()
     }
 
+    // ── test-only helpers ──────────────────────────────────────────────
+    #[cfg(test)]
+    pub fn set_snek(&self, segments: Vec<(usize, usize)>) {
+        *self.snek.borrow_mut() = segments;
+    }
+
+    #[cfg(test)]
+    pub fn set_food(&self, food: Food) {
+        let mut foods = self.foods.borrow_mut();
+        foods.clear();
+        foods.push(food);
+    }
+
+    #[cfg(test)]
+    pub fn foods_ref(&self) -> std::cell::Ref<'_, Vec<Food>> {
+        self.foods.borrow()
+    }
+
     pub fn score(&self) -> usize {
         *self.ctrl_score.borrow()
     }
@@ -704,17 +722,13 @@ impl SnekGame {
             Direction::Right => (hx.wrapping_add(1), hy),
         };
 
-        let mut eating = false;
-        {
-            let mut foods = self.foods.borrow_mut();
-            for f in foods.iter_mut() {
-                if f.x == nx && f.y == ny && !f.consumed {
-                    f.consumed = true;
-                    eating = true;
-                    break;
-                }
-            }
-        }
+        // Peek: would we eat food at the next position?  (Do NOT consume yet —
+        // the move must pass bounds / collision validation first so that a
+        // fatal move doesn't silently swallow an apple.)
+        let would_eat = {
+            let foods = self.foods.borrow();
+            foods.iter().any(|f| f.x == nx && f.y == ny && !f.consumed)
+        };
 
         if nx >= bw || ny >= bh {
             drop(snek);
@@ -723,7 +737,7 @@ impl SnekGame {
         }
 
         // Exclude tail from collision check when not eating: the tail will move away.
-        let segments_to_check = if eating {
+        let segments_to_check = if would_eat {
             snek.len()
         } else {
             snek.len().saturating_sub(1)
@@ -738,7 +752,17 @@ impl SnekGame {
             return;
         }
 
-        if eating {
+        if would_eat {
+            // Move validated — consume food now.
+            {
+                let mut foods = self.foods.borrow_mut();
+                for f in foods.iter_mut() {
+                    if f.x == nx && f.y == ny && !f.consumed {
+                        f.consumed = true;
+                        break;
+                    }
+                }
+            }
             snek.insert(0, (nx, ny));
 
             let new_score = {

@@ -11,7 +11,7 @@ use yeehaw::{
 
 use config::Config;
 use controls::ControlState;
-use game::{BoardSize, Direction, GameState, SnekGame};
+use game::{Direction, Food, FoodKind, GameState, SnekGame};
 
 /// Create a ControlState with a fixed board size from an in-memory Config.
 fn ctrl_fixed(w: usize, h: usize) -> ControlState {
@@ -1355,4 +1355,115 @@ fn test_food_position_valid_after_respawn() {
             );
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bug: food consumed before bounds / self-collision validation
+// When food sits on the tail cell and the head moves there, the old code marks
+// the food consumed BEFORE checking self-collision.  Because eating=true the
+// tail is included in the collision set → GameOver, but the food is already
+// consumed so spawn_food() never runs.  The apple vanishes, score doesn't
+// change, and the consumed food remains in the list (invisible).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Helper: place a single non-consumed food at `(fx, fy)` in the game.
+fn place_food(game: &SnekGame, fx: usize, fy: usize) {
+    game.set_food(Food {
+        kind: FoodKind::RedApple,
+        x: fx,
+        y: fy,
+        consumed: false,
+    });
+}
+
+#[test]
+fn food_on_tail_eaten_then_self_collision_does_not_consume_food() {
+    let (game, ctrl, ctx) = make_tiny_game();
+    // Board is 6×4.  After restart: head=(3,2), body=(2,2), tail=(1,2), dir=Right.
+
+    // Reconfigure snake so the next move lands on the tail:
+    //   head=(2,2) → body=(2,1) → body=(3,1) → tail=(3,2), dir=Right
+    // Next position when moving Right from (2,2) is (3,2) = tail.
+    game.set_snek(vec![(2, 2), (2, 1), (3, 1), (3, 2)]);
+    game.set_direction(Direction::Right);
+
+    // Place food exactly on the tail cell (3, 2).
+    place_food(&game, 3, 2);
+
+    let score_before = *ctrl.score.borrow();
+
+    // Tick: head moves to (3,2) which is both food AND tail.
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    // The move should result in GameOver (self-collision when eating).
+    assert_eq!(game.state(), GameState::GameOver, "expected GameOver");
+
+    // BUG (before fix): food would be marked consumed but spawn_food never
+    // called, so the consumed food stays in the list and score doesn't change.
+    // FIX: food must NOT be consumed when the move is invalid.
+    let foods = game.foods_ref();
+    let non_consumed: Vec<_> = foods.iter().filter(|f| !f.consumed).collect();
+    assert!(
+        !non_consumed.is_empty(),
+        "food must NOT be consumed when move is invalid (self-collision).  Found {} non-consumed foods",
+        non_consumed.len()
+    );
+
+    // Score must not change (no valid eat occurred).
+    assert_eq!(*ctrl.score.borrow(), score_before, "score must not change");
+}
+
+#[test]
+fn food_on_free_cell_eats_correctly() {
+    let (game, ctrl, ctx) = make_tiny_game();
+    // Board is 6×4.
+
+    // Snake: head=(2,2) → body=(2,1) → tail=(3,1), dir=Right
+    // Next position (3,2) is FREE (tail is at (3,1), not (3,2)).
+    game.set_snek(vec![(2, 2), (2, 1), (3, 1)]);
+    game.set_direction(Direction::Right);
+
+    // Place food at (3, 2) — the next position, which is free.
+    place_food(&game, 3, 2);
+
+    let score_before = *ctrl.score.borrow();
+
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    // Should eat successfully.
+    assert_eq!(game.state(), GameState::Running, "expected Running");
+    assert_eq!(*ctrl.score.borrow(), score_before + 1, "score must increase by 1");
+
+    // Snake should have grown (no tail popped).
+    let snek = game.snek();
+    assert_eq!(snek.len(), 4, "snake must grow from 3 to 4");
+    assert_eq!(snek[0], (3, 2), "head must be at food position");
+
+    // New food must have spawned (old one consumed and removed).
+    let food = game.food();
+    assert!(!food.consumed, "new food must not be consumed");
+}
+
+#[test]
+fn moving_into_tail_without_food_is_safe() {
+    let (game, ctrl, ctx) = make_tiny_game();
+    // Snake chasing its own tail — should be allowed because tail vacates.
+    //   head=(2,2) → body=(2,1) → body=(3,1) → tail=(3,2), dir=Right
+    // Next position (3,2) = tail.  No food there.
+    game.set_snek(vec![(2, 2), (2, 1), (3, 1), (3, 2)]);
+    game.set_direction(Direction::Right);
+
+    // Place food somewhere else so it doesn't interfere.
+    place_food(&game, 0, 0);
+
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    // Should survive — tail exclusion applies when not eating.
+    assert_eq!(game.state(), GameState::Running, "expected Running");
+    let snek = game.snek();
+    assert_eq!(snek[0], (3, 2), "head moved into old tail position");
+    assert_eq!(snek.len(), 4, "length unchanged (no eat)");
 }
