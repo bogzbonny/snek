@@ -75,7 +75,7 @@ impl Theme {
         }
     }
 
-    pub fn apple_color(self) -> Color {
+    pub fn food_color(self) -> Color {
         match self {
             Theme::Classic => Color::new(255, 0, 0),
             Theme::Neon => Color::new(255, 0, 255),
@@ -89,7 +89,7 @@ pub struct SnekGame {
     pane: Pane,
     snek: Rc<RefCell<Vec<(usize, usize)>>>,
     direction: Rc<RefCell<Direction>>,
-    apples: Rc<RefCell<Vec<Food>>>,
+    foods: Rc<RefCell<Vec<Food>>>,
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
     ctrl_board_size: Rc<RefCell<BoardSize>>,
@@ -97,7 +97,7 @@ pub struct SnekGame {
     ctrl_score: Rc<RefCell<usize>>,
     ctrl_high_score: Rc<RefCell<usize>>,
     ctrl_state: Rc<RefCell<GameState>>,
-    ctrl_num_apples: Rc<RefCell<usize>>,
+    ctrl_num_foods: Rc<RefCell<usize>>,
     // Last-known board dimensions for Auto mode (Rc so clones share state with original)
     last_board_w: Rc<RefCell<usize>>,
     last_board_h: Rc<RefCell<usize>>,
@@ -145,7 +145,7 @@ impl SnekGame {
             pane,
             snek: Rc::new(RefCell::new(Vec::new())),
             direction: Rc::new(RefCell::new(Direction::Right)),
-            apples: Rc::new(RefCell::new(Vec::new())),
+            foods: Rc::new(RefCell::new(Vec::new())),
             // Shared state
             ctrl_tick_interval: ctrl.tick_interval.clone(),
             ctrl_board_size: ctrl.board_size.clone(),
@@ -153,7 +153,7 @@ impl SnekGame {
             ctrl_score: ctrl.score.clone(),
             ctrl_high_score: ctrl.high_score.clone(),
             ctrl_state: ctrl.state.clone(),
-            ctrl_num_apples: ctrl.num_apples.clone(),
+            ctrl_num_foods: ctrl.num_foods.clone(),
             last_board_w: Rc::new(RefCell::new(0)),
             last_board_h: Rc::new(RefCell::new(0)),
             board_initialized: Rc::new(RefCell::new(false)),
@@ -175,12 +175,12 @@ impl SnekGame {
         *self.direction.borrow()
     }
 
-    pub fn apple(&self) -> Food {
-        *self.apples.borrow().first().unwrap_or(&Food { kind: FoodKind::RedApple, x: 0, y: 0, consumed: true })
+    pub fn food(&self) -> Food {
+        *self.foods.borrow().first().unwrap_or(&Food { kind: FoodKind::RedApple, x: 0, y: 0, consumed: true })
     }
 
-    pub fn apples(&self) -> Vec<Food> {
-        self.apples.borrow().clone()
+    pub fn foods(&self) -> Vec<Food> {
+        self.foods.borrow().clone()
     }
 
     pub fn score(&self) -> usize {
@@ -220,9 +220,9 @@ impl SnekGame {
         self.direction_queue.borrow_mut().clear();
     }
 
-    /// Initialize snek, apple and score for the given board dimensions.
+    /// Initialize snek, food and score for the given board dimensions.
     fn init_board(&self, bw: usize, bh: usize) {
-        // Guard: inner spawn area must be large enough for an apple.
+        // Guard: inner spawn area must be large enough for food.
         // If too small, leave board_initialized=false so the next
         // drawing() call (after a resize) retries.
         let inner_w = bw.saturating_sub(2);
@@ -241,8 +241,8 @@ impl SnekGame {
         *self.snek.borrow_mut() = snek;
         *self.direction.borrow_mut() = Direction::Right;
         *self.ctrl_score.borrow_mut() = 0;
-        self.apples.borrow_mut().clear();
-        self.spawn_apple(bw, bh);
+        self.foods.borrow_mut().clear();
+        self.spawn_food(bw, bh);
         *self.board_initialized.borrow_mut() = true;
     }
 }
@@ -368,14 +368,14 @@ impl Element for SnekGame {
                 let w = pane_w.saturating_sub(2);
                 let h = pane_h.saturating_sub(3); // reserve 1 row for status line
                 // Only cache dimensions when the inner spawn area is large enough
-                // for spawn_apple to work (inner_w * inner_h >= 4).  This prevents
+                // for spawn_food to work (inner_w * inner_h >= 4).  This prevents
                 // layout-probe draws with tiny DrawRegions from corrupting the
-                // cached size that tick() relies on, which would cause spawn_apple
-                // to early-return and leave the apple at its stale eaten position.
+                // cached size that tick() relies on, which would cause spawn_food
+                // to early-return and leave the food at its stale eaten position.
                 // Additionally, only grow the cache — never shrink it. A smaller
                 // DrawRegion (e.g. from a layout probe) must not overwrite the
                 // cached size, otherwise tick() uses the shrunken bounds, the
-                // apple lands outside the new rendering range, and the eating
+                // food lands outside the new rendering range, and the eating
                 // check can never fire.
                 let inner_w = w.saturating_sub(2);
                 let inner_h = h.saturating_sub(2);
@@ -388,7 +388,7 @@ impl Element for SnekGame {
                     }
                 }
                 // Use the cached (logical) board dimensions for rendering so
-                // that the iteration range always covers the apple position.
+                // that the iteration range always covers the food position.
                 let cached_w = *self.last_board_w.borrow();
                 let cached_h = *self.last_board_h.borrow();
                 if cached_w > 0 && cached_h > 0 {
@@ -418,11 +418,11 @@ impl Element for SnekGame {
         let mut chs = Vec::new();
         let theme = *self.ctrl_theme.borrow();
         let snek = self.snek.borrow();
-        let apples = self.apples.borrow();
+        let foods = self.foods.borrow();
 
         let head_color = fg_style(theme.head_color());
         let body_color = fg_style(theme.body_color());
-        let apple_color = fg_style(theme.apple_color());
+        let food_color = fg_style(theme.food_color());
         let border_color = fg_style(Color::new(128, 128, 128));
         let default_style = Style {
             fg: None,
@@ -524,8 +524,8 @@ impl Element for SnekGame {
                         DrawCh::new('◆', head_color.clone())
                     } else if snek.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
                         DrawCh::new('■', body_color.clone())
-                    } else if apples.iter().any(|f| !f.consumed && f.x == x && f.y == y) {
-                        DrawCh::new('🍎', apple_color.clone())
+                    } else if foods.iter().any(|f| !f.consumed && f.x == x && f.y == y) {
+                        DrawCh::new('🍎', food_color.clone())
                     } else {
                         DrawCh::new(' ', default_style.clone())
                     };
@@ -653,32 +653,32 @@ impl SnekGame {
     }
 
     /// Test helper: replace all food with a single RedApple at the given position.
-    pub fn spawn_apple_at(&self, x: usize, y: usize) {
-        self.apples.borrow_mut().clear();
-        self.apples.borrow_mut().push(Food { kind: FoodKind::RedApple, x, y, consumed: false });
+    pub fn spawn_food_at(&self, x: usize, y: usize) {
+        self.foods.borrow_mut().clear();
+        self.foods.borrow_mut().push(Food { kind: FoodKind::RedApple, x, y, consumed: false });
     }
 
     /// Remove consumed food and spawn new food to reach target count.
-    fn spawn_apple(&self, bw: usize, bh: usize) {
+    fn spawn_food(&self, bw: usize, bh: usize) {
         let inner_w = bw.saturating_sub(2);
         let inner_h = bh.saturating_sub(2);
         if inner_w * inner_h < 4 {
             return;
         }
-        let target = *self.ctrl_num_apples.borrow();
-        let mut apples = self.apples.borrow_mut();
+        let target = *self.ctrl_num_foods.borrow();
+        let mut foods = self.foods.borrow_mut();
         if target == 0 {
-            apples.clear();
+            foods.clear();
             return;
         }
 
         // Remove consumed food
-        apples.retain(|f| !f.consumed);
+        foods.retain(|f| !f.consumed);
 
         let snek = self.snek.borrow();
         let occupied: std::collections::HashSet<_> = snek.iter()
             .copied()
-            .chain(apples.iter().map(|f| (f.x, f.y)))
+            .chain(foods.iter().map(|f| (f.x, f.y)))
             .collect();
         let free: Vec<_> = (1..=inner_w)
             .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
@@ -686,7 +686,7 @@ impl SnekGame {
             .collect();
         drop(snek);
         let mut rng = rand::thread_rng();
-        let needed = target.saturating_sub(apples.len());
+        let needed = target.saturating_sub(foods.len());
         let mut available = free;
         for _ in 0..needed {
             if available.is_empty() {
@@ -694,7 +694,7 @@ impl SnekGame {
             }
             let idx = rng.gen_range(0..available.len());
             let pos = available.remove(idx);
-            apples.push(Food { kind: FoodKind::RedApple, x: pos.0, y: pos.1, consumed: false });
+            foods.push(Food { kind: FoodKind::RedApple, x: pos.0, y: pos.1, consumed: false });
         }
     }
 
@@ -740,7 +740,7 @@ impl SnekGame {
             }
         }
 
-        // Detect board size change mid-game; restart to reposition snek/apple
+        // Detect board size change mid-game; restart to reposition snek/food
         let new_board_size = *self.ctrl_board_size.borrow();
         if new_board_size != *self.last_board_size.borrow() {
             *self.last_board_size.borrow_mut() = new_board_size;
@@ -763,10 +763,10 @@ impl SnekGame {
             Direction::Left => (hx.wrapping_sub(1), hy),
             Direction::Right => (hx.wrapping_add(1), hy),
         };
-        // Compute eating flag and drop apples borrow immediately
+        // Compute eating flag and drop foods borrow immediately
         let eating = {
-            let apples = self.apples.borrow();
-            apples.iter().any(|f| !f.consumed && f.x == nx && f.y == ny)
+            let foods = self.foods.borrow();
+            foods.iter().any(|f| !f.consumed && f.x == nx && f.y == ny)
         };
 
         if nx >= bw || ny >= bh {
@@ -810,14 +810,14 @@ impl SnekGame {
                     Theme::Neon => "Neon",
                     Theme::Amber => "Amber",
                 };
-                let num_apples = *self.ctrl_num_apples.borrow();
-                Config::save_values(speed_ms, &board_size, theme, new_score, num_apples);
+                let num_foods = *self.ctrl_num_foods.borrow();
+                Config::save_values(speed_ms, &board_size, theme, new_score, num_foods);
             }
 
             drop(snek);
             // Mark the eaten food as consumed and respawn
             {
-                let mut foods = self.apples.borrow_mut();
+                let mut foods = self.foods.borrow_mut();
                 for f in foods.iter_mut() {
                     if f.x == nx && f.y == ny && !f.consumed {
                         f.consumed = true;
@@ -825,7 +825,7 @@ impl SnekGame {
                     }
                 }
             }
-            self.spawn_apple(bw, bh);
+            self.spawn_food(bw, bh);
         } else {
             snek.pop();
             snek.insert(0, (nx, ny));

@@ -22,11 +22,11 @@ fn ctrl_fixed(w: usize, h: usize) -> ControlState {
     ControlState::from_loaded(cfg)
 }
 
-/// Create a ControlState with custom board size and apple count from an in-memory Config.
-fn ctrl_fixed_with_apples(w: usize, h: usize, num_apples: usize) -> ControlState {
+/// Create a ControlState with custom board size and food count from an in-memory Config.
+fn ctrl_fixed_with_foods(w: usize, h: usize, num_foods: usize) -> ControlState {
     let cfg = Config {
         board_size: format!("{}x{}", w, h),
-        num_apples,
+        num_foods,
         ..Config::default()
     };
     ControlState::from_loaded(cfg)
@@ -50,22 +50,22 @@ fn make_initialized_game() -> (SnekGame, ControlState, yeehaw::Context) {
     (game, ctrl, ctx)
 }
 
-/// Verify that when multiple apples are spawned, no two occupy the same cell.
+/// Verify that when multiple foods are spawned, no two occupy the same cell.
 #[test]
-fn test_apples_never_overlap() {
+fn test_foods_never_overlap() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ctrl_fixed_with_apples(40, 20, 50);
+    let ctrl = ctrl_fixed_with_foods(40, 20, 50);
 
     for _i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apples = game.apples();
-        let unique: std::collections::HashSet<_> = apples.iter().collect();
+        let foods = game.foods();
+        let unique: std::collections::HashSet<_> = foods.iter().collect();
         assert_eq!(
             unique.len(),
-            apples.len(),
-            "apples must not overlap: {} total vs {} unique",
-            apples.len(),
+            foods.len(),
+            "foods must not overlap: {} total vs {} unique",
+            foods.len(),
             unique.len()
         );
     }
@@ -592,17 +592,17 @@ fn test_tick_on_clone_after_drawing_on_original() {
     assert_eq!(snek[0], (11, 5), "snek head must move right after tick on clone");
 }
 
-/// Verify apple position is shared between original and clone.
+/// Verify food position is shared between original and clone.
 #[test]
-fn test_apple_shared_between_clones() {
+fn test_food_shared_between_clones() {
     let (game, _, _) = make_initialized_game();
-    let apple_orig = game.apple();
+    let food_orig = game.food();
     let clone = game.clone();
-    let apple_clone = clone.apple();
+    let food_clone = clone.food();
 
     assert_eq!(
-        apple_orig, apple_clone,
-        "apple position must be identical in original and clone"
+        food_orig, food_clone,
+        "food position must be identical in original and clone"
     );
 }
 
@@ -697,26 +697,26 @@ fn test_multi_tick_movement_left() {
 }
 
 /// snek length must stay constant when not eating.
-/// Use Up direction so the snek moves along x=10; the apple is randomly
+/// Use Up direction so the snek moves along x=10; the food is randomly
 /// placed and unlikely to be on that exact column within 9 ticks.
-/// We verify by checking the apple was not consumed.
+/// We verify by checking the food was not consumed.
 #[test]
 fn test_snek_length_stays_constant_without_eating() {
     let (game, _, ctx) = make_initialized_game();
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K])); // Up
     let initial_len = game.snek().len();
-    let apple = game.apple();
+    let food = game.food();
 
     for _ in 0..9 {
         game.tick(&ctx);
     }
 
     // snek moved Up 9 steps: head went from (10,5) to (10,4)..(10,0) then wraps/dies
-    // The apple should not have been eaten unless it was on the path
-    let ate = game.apple() != apple;
+    // The food should not have been eaten unless it was on the path
+    let ate = game.food() != food;
     if ate {
-        // Apple was eaten; verify it respawned (the core bug check)
-        assert_ne!(game.apple(), apple, "apple must respawn at new position after being eaten");
+        // Food was eaten; verify it respawned (the core bug check)
+        assert_ne!(game.food(), food, "food must respawn at new position after being eaten");
         assert_eq!(game.snek().len(), initial_len + 1, "snek must grow by 1 after eating");
     } else {
         assert_eq!(
@@ -984,62 +984,62 @@ fn test_main_loop_pattern_clone_tick_works() {
 
 /// Apples must never spawn on the border (outermost row/column of the playable area).
 /// Border cells for a bw×bh board: x=0, x=bw-1, y=0, y=bh-1.
-fn is_on_border(apple: (usize, usize), bw: usize, bh: usize) -> bool {
-    let (ax, ay) = apple;
+fn is_on_border(pos: (usize, usize), bw: usize, bh: usize) -> bool {
+    let (ax, ay) = pos;
     ax == 0 || ax == bw - 1 || ay == 0 || ay == bh - 1
 }
 
 #[test]
-fn test_apple_not_on_border_after_init() {
+fn test_food_not_on_border_after_init() {
     let (game, _, _) = make_initialized_game();
     // Board is 20×10; border cells are x=0, x=19, y=0, y=9
-    let apple = game.apple();
+    let food = game.food();
     assert!(
-        !is_on_border((apple.x, apple.y), 20, 10),
-        "apple {:?} must not be on the border of a 20×10 board",
-        apple
+        !is_on_border((food.x, food.y), 20, 10),
+        "food {:?} must not be on the border of a 20×10 board",
+        food
     );
 }
 
 #[test]
-fn test_apple_not_on_border_after_many_restarts() {
+fn test_food_not_on_border_after_many_restarts() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
+        let food = game.food();
         assert!(
-            !is_on_border((apple.x, apple.y), 20, 10),
-            "restart {}: apple {:?} must not be on the border of a 20×10 board",
+            !is_on_border((food.x, food.y), 20, 10),
+            "restart {}: food {:?} must not be on the border of a 20×10 board",
             i,
-            apple
+            food
         );
     }
 }
 
 #[test]
-fn test_apple_not_on_border_small_board() {
+fn test_food_not_on_border_small_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(10, 8);
 
     for i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
+        let food = game.food();
         assert!(
-            !is_on_border((apple.x, apple.y), 10, 8),
-            "restart {}: apple {:?} must not be on the border of a 10×8 board",
+            !is_on_border((food.x, food.y), 10, 8),
+            "restart {}: food {:?} must not be on the border of a 10×8 board",
             i,
-            apple
+            food
         );
     }
 }
 
-/// Explicitly verify all four corners are never occupied by an apple.
+/// Explicitly verify all four corners are never occupied by food.
 #[test]
-fn test_apple_not_in_any_corner() {
+fn test_food_not_in_any_corner() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(20, 10);
 
@@ -1047,134 +1047,134 @@ fn test_apple_not_in_any_corner() {
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
+        let food = game.food();
         for (ci, corner) in corners.iter().enumerate() {
             assert_ne!(
-                (apple.x, apple.y), *corner,
-                "restart {}: apple must not be at corner {} ({:?})",
+                (food.x, food.y), *corner,
+                "restart {}: food must not be at corner {} ({:?})",
                 i, ci, corner
             );
         }
     }
 }
 
-/// Verify apple never spawns on the left border (x=0) across many iterations.
+/// Verify food never spawns on the left border (x=0) across many iterations.
 #[test]
-fn test_apple_not_on_left_border() {
+fn test_food_not_on_left_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
-        let ax = apple.x;
-        let ay = apple.y;
+        let food = game.food();
+        let ax = food.x;
+        let ay = food.y;
         assert!(
             ax != 0,
-            "restart {}: apple x={} must not be on left border (x=0)",
+            "restart {}: food x={} must not be on left border (x=0)",
             i, ax
         );
         // Also verify y is valid
-        assert!(ay > 0 && ay < 10, "restart {}: apple y={} out of bounds", i, ay);
+        assert!(ay > 0 && ay < 10, "restart {}: food y={} out of bounds", i, ay);
     }
 }
 
-/// Verify apple never spawns on the right border (x=bw-1) across many iterations.
+/// Verify food never spawns on the right border (x=bw-1) across many iterations.
 #[test]
-fn test_apple_not_on_right_border() {
+fn test_food_not_on_right_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
-        let ax = apple.x;
-        let ay = apple.y;
+        let food = game.food();
+        let ax = food.x;
+        let ay = food.y;
         assert!(
             ax != 19,
-            "restart {}: apple x={} must not be on right border (x=19)",
+            "restart {}: food x={} must not be on right border (x=19)",
             i, ax
         );
-        assert!(ay > 0 && ay < 10, "restart {}: apple y={} out of bounds", i, ay);
+        assert!(ay > 0 && ay < 10, "restart {}: food y={} out of bounds", i, ay);
     }
 }
 
-/// Verify apple never spawns on the top border (y=0) across many iterations.
+/// Verify food never spawns on the top border (y=0) across many iterations.
 #[test]
-fn test_apple_not_on_top_border() {
+fn test_food_not_on_top_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
-        let ax = apple.x;
-        let ay = apple.y;
+        let food = game.food();
+        let ax = food.x;
+        let ay = food.y;
         assert!(
             ay != 0,
-            "restart {}: apple y={} must not be on top border (y=0)",
+            "restart {}: food y={} must not be on top border (y=0)",
             i, ay
         );
-        assert!(ax > 0 && ax < 20, "restart {}: apple x={} out of bounds", i, ax);
+        assert!(ax > 0 && ax < 20, "restart {}: food x={} out of bounds", i, ax);
     }
 }
 
-/// Verify apple never spawns on the bottom border (y=bh-1) across many iterations.
+/// Verify food never spawns on the bottom border (y=bh-1) across many iterations.
 #[test]
-fn test_apple_not_on_bottom_border() {
+fn test_food_not_on_bottom_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
-        let ax = apple.x;
-        let ay = apple.y;
+        let food = game.food();
+        let ax = food.x;
+        let ay = food.y;
         assert!(
             ay != 9,
-            "restart {}: apple y={} must not be on bottom border (y=9)",
+            "restart {}: food y={} must not be on bottom border (y=9)",
             i, ay
         );
-        assert!(ax > 0 && ax < 20, "restart {}: apple x={} out of bounds", i, ax);
+        assert!(ax > 0 && ax < 20, "restart {}: food x={} out of bounds", i, ax);
     }
 }
 
-/// Test minimum viable board (4×4) — inner area 2×2, enough for snek + apple.
+/// Test minimum viable board (4×4) — inner area 2×2, enough for snek + food.
 #[test]
-fn test_apple_on_minimum_board() {
+fn test_food_on_minimum_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(4, 4);
 
     for i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
+        let food = game.food();
         assert!(
-            !is_on_border((apple.x, apple.y), 4, 4),
-            "restart {}: apple {:?} must not be on border of 4×4 board",
-            i, apple
+            !is_on_border((food.x, food.y), 4, 4),
+            "restart {}: food {:?} must not be on border of 4×4 board",
+            i, food
         );
     }
 }
 
 /// Test square board with even dimensions.
 #[test]
-fn test_apple_not_on_border_square_board() {
+fn test_food_not_on_border_square_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
     let ctrl = ctrl_fixed(16, 16);
 
     for i in 0..200 {
         let game = game::SnekGame::new(&ctx, &ctrl);
         game.restart();
-        let apple = game.apple();
+        let food = game.food();
         assert!(
-            !is_on_border((apple.x, apple.y), 16, 16),
-            "restart {}: apple {:?} must not be on border of 16×16 board",
-            i, apple
+            !is_on_border((food.x, food.y), 16, 16),
+            "restart {}: food {:?} must not be on border of 16×16 board",
+            i, food
         );
     }
 }
@@ -1297,8 +1297,8 @@ fn test_restart_clears_direction_queue() {
 
 /// Regression test: in Auto mode a smaller DrawRegion must NOT shrink the cached
 /// board dimensions.  Previously a layout-probe with a medium-sized DrawRegion
-/// would overwrite `last_board_w`/`last_board_h`, leaving the apple outside the
-/// rendering range — the apple would "disappear" until the DrawRegion grew back.
+/// would overwrite `last_board_w`/`last_board_h`, leaving the food outside the
+/// rendering range — the food would "disappear" until the DrawRegion grew back.
 #[test]
 fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
@@ -1309,31 +1309,31 @@ fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
     let large_dr = DrawRegion::new_large().with_size(Size::new(80, 40));
     game.drawing(&ctx, &large_dr, false);
 
-    // Board should be initialised — apple position should not be (0,0)
-    let apple_before = game.apple();
-    assert_ne!((apple_before.x, apple_before.y), (0, 0), "board should be initialised");
+    // Board should be initialised — food position should not be (0,0)
+    let food_before = game.food();
+    assert_ne!((food_before.x, food_before.y), (0, 0), "board should be initialised");
 
     // 2) Draw with a smaller DrawRegion (40x20 pane → 38x18 board).
     //    Without the fix the cache would shrink and tick() would use 38x18
-    //    dimensions. The apple (at its original position in 78x38 space)
+    //    dimensions. The food (at its original position in 78x38 space)
     //    would be unreachable.
     let small_dr = DrawRegion::new_large().with_size(Size::new(40, 20));
     game.drawing(&ctx, &small_dr, false);
 
-    // 3) Apple position must NOT have changed — it was never eaten.
+    // 3) Food position must NOT have changed — it was never eaten.
     assert_eq!(
-        game.apple(),
-        apple_before,
-        "apple position must not change after small DrawRegion"
+        game.food(),
+        food_before,
+        "food position must not change after small DrawRegion"
     );
 
     // 4) Verify tick() still uses the original (large) dimensions — the snek
-    //    should be able to reach and eat the apple.
+    //    should be able to reach and eat the food.
     *ctrl.state.borrow_mut() = GameState::Running;
-    let result = steer_to_apple(&game, &ctrl, &ctx);
+    let result = steer_to_food(&game, &ctrl, &ctx);
     assert!(
         result,
-        "snek should be able to reach and eat the apple after small DrawRegion"
+        "snek should be able to reach and eat the food after small DrawRegion"
     );
 }
 
@@ -1348,31 +1348,31 @@ fn make_tiny_game() -> (SnekGame, ControlState, yeehaw::Context) {
     (game, ctrl, ctx)
 }
 
-/// Steer the snek toward the apple using greedy shortest-path heuristics.
-/// Returns true if the snek ate the apple, false if game ended first.
-fn steer_to_apple(game: &SnekGame, ctrl: &ControlState, ctx: &yeehaw::Context) -> bool {
+/// Steer the snek toward the food using greedy shortest-path heuristics.
+/// Returns true if the snek ate the food, false if game ended first.
+fn steer_to_food(game: &SnekGame, ctrl: &ControlState, ctx: &yeehaw::Context) -> bool {
     *ctrl.state.borrow_mut() = GameState::Running;
 
     for _ in 0..200 {
         if game.state() != GameState::Running {
             return false;
         }
-        let apple = game.apple();
+        let food = game.food();
         let head = game.snek()[0];
         let dir = game.direction();
 
-        // Greedy: move toward apple
+        // Greedy: move toward food
         let mut next_dir = dir;
-        if apple.x > head.0 && dir != Direction::Left {
+        if food.x > head.0 && dir != Direction::Left {
             next_dir = Direction::Right;
-        } else if apple.x < head.0 && dir != Direction::Right {
+        } else if food.x < head.0 && dir != Direction::Right {
             next_dir = Direction::Left;
-        } else if apple.y > head.1 && dir != Direction::Up {
+        } else if food.y > head.1 && dir != Direction::Up {
             next_dir = Direction::Down;
-        } else if apple.y < head.1 && dir != Direction::Down {
+        } else if food.y < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
         } else {
-            // Cannot move toward apple directly (would need to reverse).
+            // Cannot move toward food directly (would need to reverse).
             // Turn 90° to reposition, then approach from a different axis.
             next_dir = match dir {
                 Direction::Up | Direction::Down => Direction::Right,
@@ -1391,23 +1391,23 @@ fn steer_to_apple(game: &SnekGame, ctrl: &ControlState, ctx: &yeehaw::Context) -
             game.receive_event(ctx, Event::KeyCombo(vec![key]));
         }
 
-        let apple_before = game.apple();
+        let food_before = game.food();
         game.tick(ctx);
-        let apple_after = game.apple();
+        let food_after = game.food();
 
-        if apple_after != apple_before {
+        if food_after != food_before {
             // Apple was eaten — verify it respawned at a NEW position
             assert_ne!(
-                apple_after, apple_before,
-                "BUG: apple did not respawn after being eaten; still at {:?}",
-                apple_before
+                food_after, food_before,
+                "BUG: food did not respawn after being eaten; still at {:?}",
+                food_before
             );
-            // Verify new apple is not on the snek
+            // Verify new food is not on the snek
             let snek = game.snek();
             assert!(
-                !snek.iter().any(|s| *s == (apple_after.x, apple_after.y)),
-                "respawned apple ({:?}) must not overlap snek",
-                apple_after
+                !snek.iter().any(|s| *s == (food_after.x, food_after.y)),
+                "respawned food ({:?}) must not overlap snek",
+                food_after
             );
             return true;
         }
@@ -1415,46 +1415,46 @@ fn steer_to_apple(game: &SnekGame, ctrl: &ControlState, ctx: &yeehaw::Context) -
     false
 }
 
-/// Core reproduction: after the snek eats an apple, a NEW apple must
+/// Core reproduction: after the snek eats food, a NEW food must
 /// appear at a different position. This is the exact bug the user reports.
 #[test]
-fn test_apple_respawns_at_new_position_after_eating() {
+fn test_food_respawns_at_new_position_after_eating() {
     let (game, ctrl, ctx) = make_tiny_game();
-    let ate = steer_to_apple(&game, &ctrl, &ctx);
+    let ate = steer_to_food(&game, &ctrl, &ctx);
     assert!(
         ate,
-        "snek should have eaten the apple on a 6x4 board with steering"
+        "snek should have eaten the food on a 6x4 board with steering"
     );
 }
 
 /// Multiple eats: verify every eat results in a valid respawn.
 #[test]
-fn test_apple_always_respawns_after_multiple_eats() {
+fn test_food_always_respawns_after_multiple_eats() {
     let (game, ctrl, ctx) = make_tiny_game();
     *ctrl.state.borrow_mut() = GameState::Running;
 
     let mut eats = 0u32;
-    let mut prev_apple = game.apple();
+    let mut prev_food = game.food();
 
     for _ in 0..300 {
         if game.state() != GameState::Running {
             break;
         }
-        // Steer toward apple each tick
-        let apple = game.apple();
+        // Steer toward food each tick
+        let food = game.food();
         let head = game.snek()[0];
         let dir = game.direction();
         let mut next_dir = dir;
-        if apple.x > head.0 && dir != Direction::Left {
+        if food.x > head.0 && dir != Direction::Left {
             next_dir = Direction::Right;
-        } else if apple.x < head.0 && dir != Direction::Right {
+        } else if food.x < head.0 && dir != Direction::Right {
             next_dir = Direction::Left;
-        } else if apple.y > head.1 && dir != Direction::Up {
+        } else if food.y > head.1 && dir != Direction::Up {
             next_dir = Direction::Down;
-        } else if apple.y < head.1 && dir != Direction::Down {
+        } else if food.y < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
         } else {
-            // Cannot move toward apple directly (would need to reverse).
+            // Cannot move toward food directly (would need to reverse).
             // Turn 90° to reposition, then approach from a different axis.
             next_dir = match dir {
                 Direction::Up | Direction::Down => Direction::Right,
@@ -1472,36 +1472,36 @@ fn test_apple_always_respawns_after_multiple_eats() {
         }
 
         game.tick(&ctx);
-        let current = game.apple();
-        if current != prev_apple {
-            assert_ne!(current, prev_apple, "new apple must differ from old");
-            // Verify new apple is valid
+        let current = game.food();
+        if current != prev_food {
+            assert_ne!(current, prev_food, "new food must differ from old");
+            // Verify new food is valid
             let snek = game.snek();
-            assert!(!snek.iter().any(|s| *s == (current.x, current.y)), "apple must not overlap snek");
+            assert!(!snek.iter().any(|s| *s == (current.x, current.y)), "food must not overlap snek");
             eats += 1;
-            prev_apple = current;
+            prev_food = current;
         }
     }
     assert!(
         eats >= 2,
-        "expected at least 2 apple eats on a 6x4 board with steering, got {}",
+        "expected at least 2 food eats on a 6x4 board with steering, got {}",
         eats
     );
 }
 
-/// Verify that after eating an apple, the new apple is never at the
+/// Verify that after eating food, the new food is never at the
 /// exact same coordinates as the one that was just eaten.
 #[test]
-fn test_apple_never_respawns_at_eaten_position() {
+fn test_food_never_respawns_at_eaten_position() {
     let (game, ctrl, ctx) = make_tiny_game();
-    let ate = steer_to_apple(&game, &ctrl, &ctx);
-    assert!(ate, "snek should have eaten the apple");
-    // If we got here, steer_to_apple already asserted apple_after != apple_before
+    let ate = steer_to_food(&game, &ctrl, &ctx);
+    assert!(ate, "snek should have eaten the food");
+    // If we got here, steer_to_food already asserted food_after != food_before
 }
 
-/// Regression: verify that the apple position is always valid after respawn.
+/// Regression: verify that the food position is always valid after respawn.
 #[test]
-fn test_apple_position_valid_after_respawn() {
+fn test_food_position_valid_after_respawn() {
     let (game, ctrl, ctx) = make_tiny_game();
     *ctrl.state.borrow_mut() = GameState::Running;
 
@@ -1509,18 +1509,18 @@ fn test_apple_position_valid_after_respawn() {
         if game.state() != GameState::Running {
             break;
         }
-        // Steer toward apple
-        let apple = game.apple();
+        // Steer toward food
+        let food = game.food();
         let head = game.snek()[0];
         let dir = game.direction();
         let mut next_dir = dir;
-        if apple.x > head.0 && dir != Direction::Left {
+        if food.x > head.0 && dir != Direction::Left {
             next_dir = Direction::Right;
-        } else if apple.x < head.0 && dir != Direction::Right {
+        } else if food.x < head.0 && dir != Direction::Right {
             next_dir = Direction::Left;
-        } else if apple.y > head.1 && dir != Direction::Up {
+        } else if food.y > head.1 && dir != Direction::Up {
             next_dir = Direction::Down;
-        } else if apple.y < head.1 && dir != Direction::Down {
+        } else if food.y < head.1 && dir != Direction::Down {
             next_dir = Direction::Up;
         }
         if next_dir != dir {
@@ -1534,19 +1534,19 @@ fn test_apple_position_valid_after_respawn() {
         }
 
         game.tick(&ctx);
-        let apple = game.apple();
+        let food = game.food();
         // For Fixed(6, 4): valid inner area is x in [1..5], y in [1..3]
-        assert!(apple.x > 0 && apple.x < 5, "apple x={} must be in (0, 5)", apple.x);
-        assert!(apple.y > 0 && apple.y < 3, "apple y={} must be in (0, 3)", apple.y);
+        assert!(food.x > 0 && food.x < 5, "food x={} must be in (0, 5)", food.x);
+        assert!(food.y > 0 && food.y < 3, "food y={} must be in (0, 3)", food.y);
         let snek = game.snek();
         // When the snek fills the entire inner area there is nowhere to
-        // respawn — the apple stays at the cell just eaten (on the head).
+        // respawn — the food stays at the cell just eaten (on the head).
         let inner_area = 4 * 2; // inner_w * inner_h for Fixed(6, 4)
         if snek.len() < inner_area {
             assert!(
-                !snek.iter().any(|s| *s == (apple.x, apple.y)),
-                "apple ({:?}) must not overlap snek",
-                apple
+                !snek.iter().any(|s| *s == (food.x, food.y)),
+                "food ({:?}) must not overlap snek",
+                food
             );
         }
     }

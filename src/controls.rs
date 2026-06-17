@@ -19,7 +19,7 @@ pub struct ControlState {
     pub score: Rc<RefCell<usize>>,
     pub high_score: Rc<RefCell<usize>>,
     pub state: Rc<RefCell<GameState>>,
-    pub num_apples: Rc<RefCell<usize>>,
+    pub num_foods: Rc<RefCell<usize>>,
 }
 
 impl ControlState {
@@ -56,7 +56,7 @@ impl ControlState {
             _ => Theme::Classic,
         };
 
-        let num_apples = cfg.num_apples.clamp(1, 100);
+        let num_foods = cfg.num_foods.clamp(1, 100);
 
         Self {
             tick_interval: Rc::new(RefCell::new(Duration::from_millis(cfg.speed_ms.max(2)))),
@@ -65,7 +65,7 @@ impl ControlState {
             score: Rc::new(RefCell::new(0)),
             high_score: Rc::new(RefCell::new(cfg.high_score)),
             state: Rc::new(RefCell::new(GameState::Paused)),
-            num_apples: Rc::new(RefCell::new(num_apples)),
+            num_foods: Rc::new(RefCell::new(num_foods)),
         }
     }
 }
@@ -97,7 +97,7 @@ pub fn build_control_bar(
     let board_size = state.board_size.clone();
     let theme = state.theme.clone();
     let high_score = state.high_score.clone();
-    let num_apples = state.num_apples.clone();
+    let num_foods = state.num_foods.clone();
     *speed_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 50ms..=2.5ms
@@ -108,7 +108,7 @@ pub fn build_control_bar(
             &board_size_to_str(&board_size.borrow()),
             theme_to_str(&theme.borrow()),
             *high_score.borrow(),
-            *num_apples.borrow(),
+            *num_foods.borrow(),
         );
         EventResponses::default()
     });
@@ -119,7 +119,7 @@ pub fn build_control_bar(
     let tick_interval = state.tick_interval.clone();
     let theme = state.theme.clone();
     let high_score = state.high_score.clone();
-    let num_apples = state.num_apples.clone();
+    let num_foods = state.num_foods.clone();
     let size_dropdown = DropdownList::new(
         ctx,
         vec!["Auto", "20x10", "30x15", "40x20", "50x25", "60x30"],
@@ -139,7 +139,7 @@ pub fn build_control_bar(
                 &board_size_to_str(&board_size.borrow()),
                 theme_to_str(&theme.borrow()),
                 *high_score.borrow(),
-                *num_apples.borrow(),
+                *num_foods.borrow(),
             );
             EventResponses::default()
         }),
@@ -151,7 +151,7 @@ pub fn build_control_bar(
     let tick_interval = state.tick_interval.clone();
     let board_size = state.board_size.clone();
     let high_score = state.high_score.clone();
-    let num_apples = state.num_apples.clone();
+    let num_foods = state.num_foods.clone();
     let theme_dropdown = DropdownList::new(
         ctx,
         vec!["Classic", "Neon", "Amber"],
@@ -168,7 +168,7 @@ pub fn build_control_bar(
                 &board_size_to_str(&board_size.borrow()),
                 theme_to_str(&theme.borrow()),
                 *high_score.borrow(),
-                *num_apples.borrow(),
+                *num_foods.borrow(),
             );
             EventResponses::default()
         }),
@@ -184,27 +184,27 @@ pub fn build_control_bar(
     }));
     pane.add_element(Box::new(restart_btn.at(89, 0)));
 
-    // --- Row 1: Apple count slider ---
+    // --- Row 1: Food count slider ---
 
-    pane.add_element(Box::new(Label::new(ctx, "Apples").at(0, 1)));
+    pane.add_element(Box::new(Label::new(ctx, "Foods").at(0, 1)));
 
-    let apple_slider = Slider::new_basic_line(ctx);
-    *apple_slider.position.borrow_mut() = 0.0;
+    let food_slider = Slider::new_basic_line(ctx);
+    *food_slider.position.borrow_mut() = 0.0;
     {
-        let mut loc = apple_slider.get_dyn_location_set().clone();
+        let mut loc = food_slider.get_dyn_location_set().clone();
         loc.set_dyn_width(DynVal::new_fixed(50));
-        apple_slider.set_dyn_location_set(loc);
+        food_slider.set_dyn_location_set(loc);
     }
-    let num_apples = state.num_apples.clone();
+    let num_foods = state.num_foods.clone();
     let tick_interval = state.tick_interval.clone();
     let board_size = state.board_size.clone();
     let theme = state.theme.clone();
     let high_score = state.high_score.clone();
-    *apple_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
+    *food_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 1..=100
         let n = (pos * 99.0) as usize + 1;
-        *num_apples.borrow_mut() = n;
+        *num_foods.borrow_mut() = n;
         Config::save_values(
             tick_interval.borrow().as_millis() as u64,
             &board_size_to_str(&board_size.borrow()),
@@ -214,7 +214,7 @@ pub fn build_control_bar(
         );
         EventResponses::default()
     });
-    pane.add_element(Box::new(apple_slider.at(8, 1)));
+    pane.add_element(Box::new(food_slider.at(8, 1)));
 
     Box::new(pane)
 }
