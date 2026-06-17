@@ -624,27 +624,21 @@ impl SnakeGame {
             return;
         }
         let snake = self.snake.borrow();
-        let occupied = snake
-            .iter()
-            .filter(|&&(sx, sy)| sx > 0 && sx < bw - 1 && sy > 0 && sy < bh - 1)
-            .count();
-        // occupied is bounded by inner_w * inner_h (one segment per cell),
-        // so this guard is unreachable dead-code kept as a safety net.
-        // The previous `>=` variant caused the apple to never respawn when
-        // the snake filled the inner area, leaving a stale apple position
-        // hidden behind the snake body.
-        #[allow(unreachable_code)]
-        if occupied > inner_w * inner_h {
-            return;
+        // Enumerate free cells in the inner spawn area and pick one at
+        // random.  O(inner_cells * snake_len) but bounded and guaranteed
+        // to find a placement when one exists — avoids both the
+        // infinite-loop risk of pure random sampling and the stale-apple
+        // bug of an early `>=` return guard.
+        let free: Vec<_> = (1..=inner_w)
+            .flat_map(|x| (1..=inner_h).map(move |y| (x, y)))
+            .filter(|&(x, y)| !snake.iter().any(|&(sx, sy)| sx == x && sy == y))
+            .collect();
+
+        if let Some(pos) = free.get(rand::thread_rng().gen_range(0..free.len())) {
+            *self.apple.borrow_mut() = *pos;
         }
-        loop {
-            let rx = 1 + rand::thread_rng().gen_range(0..inner_w);
-            let ry = 1 + rand::thread_rng().gen_range(0..inner_h);
-            if !snake.iter().any(|&(sx, sy)| sx == rx && sy == ry) {
-                *self.apple.borrow_mut() = (rx, ry);
-                break;
-            }
-        }
+        // If free is empty the snake fills the entire inner area — nothing
+        // we can do; leave apple at its current position.
     }
 
     pub fn restart(&self) {
