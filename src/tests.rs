@@ -1,11 +1,8 @@
 #![allow(unused_must_use)]
 
-#[path = "../src/controls.rs"]
-mod controls;
-#[path = "../src/game.rs"]
-mod game;
-#[path = "../src/config.rs"]
-mod config;
+use super::config;
+use super::controls;
+use super::game;
 
 use yeehaw::{
     DrawRegion, Element, Event, Keyboard, ParentPane, Size, Tui,

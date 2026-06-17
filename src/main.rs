@@ -8,6 +8,9 @@ pub mod controls;
 pub mod game;
 pub mod config;
 
+#[cfg(test)]
+mod tests;
+
 use controls::{build_control_bar, ControlState};
 use game::SnakeGame;
 
