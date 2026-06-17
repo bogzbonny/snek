@@ -382,7 +382,7 @@ impl Element for SnakeGame {
                 } else if snake.iter().skip(1).any(|&(cx, cy)| cx == x && cy == y) {
                     DrawCh::new('■', body_color.clone())
                 } else if apple == (x, y) {
-                    DrawCh::new('e', apple_color.clone())
+                    DrawCh::new('🍎', apple_color.clone())
                 } else {
                     DrawCh::new(' ', default_style.clone())
                 };
