@@ -4,12 +4,12 @@ use std::rc::Rc;
 use tokio::time::interval;
 use yeehaw::{DynVal, Element, ParentPane, Tui, VerticalStack};
 
-mod controls;
-mod game;
+pub mod controls;
+pub mod game;
+pub mod config;
 
 use controls::{build_control_bar, ControlState};
 use game::SnakeGame;
-use snek::config;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

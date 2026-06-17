@@ -1,12 +1,19 @@
 #![allow(unused_must_use)]
 
+#[path = "../src/controls.rs"]
+mod controls;
+#[path = "../src/game.rs"]
+mod game;
+#[path = "../src/config.rs"]
+mod config;
+
 use yeehaw::{
     DrawRegion, Element, Event, Keyboard, ParentPane, Size, Tui,
     VerticalStack,
 };
 
-use snek::controls::ControlState;
-use snek::game::{BoardSize, Direction, GameState, SnakeGame};
+use controls::ControlState;
+use game::{BoardSize, Direction, GameState, SnakeGame};
 
 fn make_game() -> (SnakeGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
@@ -36,7 +43,7 @@ fn test_apples_never_overlap() {
     *ctrl.num_apples.borrow_mut() = 50;
 
     for _i in 0..100 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let apples = game.apples();
         let unique: std::collections::HashSet<_> = apples.iter().collect();
@@ -987,7 +994,7 @@ fn test_apple_not_on_border_after_many_restarts() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..100 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let apple = game.apple();
         assert!(
@@ -1006,7 +1013,7 @@ fn test_apple_not_on_border_small_board() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(10, 8);
 
     for i in 0..100 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let apple = game.apple();
         assert!(
@@ -1027,7 +1034,7 @@ fn test_apple_not_in_any_corner() {
 
     let corners = [(0, 0), (19, 0), (0, 9), (19, 9)];
     for i in 0..500 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let apple = game.apple();
         for (ci, corner) in corners.iter().enumerate() {
@@ -1048,7 +1055,7 @@ fn test_apple_not_on_left_border() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let (ax, ay) = game.apple();
         assert!(
@@ -1069,7 +1076,7 @@ fn test_apple_not_on_right_border() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let (ax, ay) = game.apple();
         assert!(
@@ -1089,7 +1096,7 @@ fn test_apple_not_on_top_border() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let (ax, ay) = game.apple();
         assert!(
@@ -1109,7 +1116,7 @@ fn test_apple_not_on_bottom_border() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
 
     for i in 0..500 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let (ax, ay) = game.apple();
         assert!(
@@ -1129,7 +1136,7 @@ fn test_apple_on_minimum_board() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(4, 4);
 
     for i in 0..100 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let apple = game.apple();
         assert!(
@@ -1148,7 +1155,7 @@ fn test_apple_not_on_border_square_board() {
     *ctrl.board_size.borrow_mut() = BoardSize::Fixed(16, 16);
 
     for i in 0..200 {
-        let game = snek::game::SnakeGame::new(&ctx, &ctrl);
+        let game = game::SnakeGame::new(&ctx, &ctrl);
         game.restart();
         let apple = game.apple();
         assert!(
