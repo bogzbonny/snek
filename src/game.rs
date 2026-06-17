@@ -368,13 +368,30 @@ impl Element for SnakeGame {
                 // layout-probe draws with tiny DrawRegions from corrupting the
                 // cached size that tick() relies on, which would cause spawn_apple
                 // to early-return and leave the apple at its stale eaten position.
+                // Additionally, only grow the cache — never shrink it. A smaller
+                // DrawRegion (e.g. from a layout probe) must not overwrite the
+                // cached size, otherwise tick() uses the shrunken bounds, the
+                // apple lands outside the new rendering range, and the eating
+                // check can never fire.
                 let inner_w = w.saturating_sub(2);
                 let inner_h = h.saturating_sub(2);
                 if inner_w.saturating_mul(inner_h) >= 4 {
-                    *self.last_board_w.borrow_mut() = w;
-                    *self.last_board_h.borrow_mut() = h;
+                    let cur_w = *self.last_board_w.borrow();
+                    let cur_h = *self.last_board_h.borrow();
+                    if w >= cur_w && h >= cur_h {
+                        *self.last_board_w.borrow_mut() = w;
+                        *self.last_board_h.borrow_mut() = h;
+                    }
                 }
-                (w, h, 0, 0)
+                // Use the cached (logical) board dimensions for rendering so
+                // that the iteration range always covers the apple position.
+                let cached_w = *self.last_board_w.borrow();
+                let cached_h = *self.last_board_h.borrow();
+                if cached_w > 0 && cached_h > 0 {
+                    (cached_w, cached_h, 0, 0)
+                } else {
+                    (w, h, 0, 0)
+                }
             }
             BoardSize::Fixed(w, h) => {
                 let bw = w + 2;

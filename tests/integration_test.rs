@@ -1,6 +1,9 @@
 #![allow(unused_must_use)]
 
-use yeehaw::{Element, Event, Keyboard, ParentPane, Tui, VerticalStack};
+use yeehaw::{
+    DrawRegion, Element, Event, Keyboard, ParentPane, Size, Tui,
+    VerticalStack,
+};
 
 use snek::controls::ControlState;
 use snek::game::{BoardSize, Direction, GameState, SnakeGame};
@@ -1247,6 +1250,49 @@ fn test_restart_clears_direction_queue() {
     game.tick(&ctx);
     // If queue wasn't cleared, Down would be applied here instead of staying Up
     assert_eq!(game.direction(), Direction::Up, "no stale queue entries after restart");
+}
+
+/// Regression test: in Auto mode a smaller DrawRegion must NOT shrink the cached
+/// board dimensions.  Previously a layout-probe with a medium-sized DrawRegion
+/// would overwrite `last_board_w`/`last_board_h`, leaving the apple outside the
+/// rendering range — the apple would "disappear" until the DrawRegion grew back.
+#[test]
+fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
+    let (_tui, ctx) = Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Auto;
+    let game = SnakeGame::new(&ctx, &ctrl);
+
+    // 1) Initialise board with a large DrawRegion (80x40 pane → 78x38 board)
+    let large_dr = DrawRegion::new_large().with_size(Size::new(80, 40));
+    game.drawing(&ctx, &large_dr, false);
+
+    // Board should be initialised — apple position should not be (0,0)
+    let apple_before = game.apple();
+    assert_ne!(apple_before, (0, 0), "board should be initialised");
+
+    // 2) Draw with a smaller DrawRegion (40x20 pane → 38x18 board).
+    //    Without the fix the cache would shrink and tick() would use 38x18
+    //    dimensions. The apple (at its original position in 78x38 space)
+    //    would be unreachable.
+    let small_dr = DrawRegion::new_large().with_size(Size::new(40, 20));
+    game.drawing(&ctx, &small_dr, false);
+
+    // 3) Apple position must NOT have changed — it was never eaten.
+    assert_eq!(
+        game.apple(),
+        apple_before,
+        "apple position must not change after small DrawRegion"
+    );
+
+    // 4) Verify tick() still uses the original (large) dimensions — the snake
+    //    should be able to reach and eat the apple.
+    *ctrl.state.borrow_mut() = GameState::Running;
+    let result = steer_to_apple(&game, &ctrl, &ctx);
+    assert!(
+        result,
+        "snake should be able to reach and eat the apple after small DrawRegion"
+    );
 }
 
 /// Helper: make a game on a 6×4 fixed board. Snake head starts at (3,2),
