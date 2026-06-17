@@ -121,7 +121,7 @@ pub struct ControlState {
 impl ControlState {
     pub fn new(ctx: &Context) -> Self {
         Self {
-            tick_interval: Rc::new(RefCell::new(Duration::from_millis(251))),
+            tick_interval: Rc::new(RefCell::new(Duration::from_millis(26))),
             board_size: Rc::new(RefCell::new(BoardSize::Auto)),
             theme: Rc::new(RefCell::new(Theme::Classic)),
             score: Rc::new(RefCell::new(0)),
@@ -152,8 +152,8 @@ pub fn build_control_bar(
     let tick_interval = state.tick_interval.clone();
     *slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
-        // Map 0.0..=1.0 → 500ms..=2.5ms
-        let ms = (500.0 - pos * 497.5) as u64;
+        // Map 0.0..=1.0 → 50ms..=2.5ms
+        let ms = (50.0 - pos * 47.5) as u64;
         *tick_interval.borrow_mut() = Duration::from_millis(ms);
         EventResponses::default()
     });
