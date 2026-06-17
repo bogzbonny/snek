@@ -608,7 +608,13 @@ impl SnakeGame {
             .iter()
             .filter(|&&(sx, sy)| sx > 0 && sx < bw - 1 && sy > 0 && sy < bh - 1)
             .count();
-        if occupied >= inner_w * inner_h {
+        // occupied is bounded by inner_w * inner_h (one segment per cell),
+        // so this guard is unreachable dead-code kept as a safety net.
+        // The previous `>=` variant caused the apple to never respawn when
+        // the snake filled the inner area, leaving a stale apple position
+        // hidden behind the snake body.
+        #[allow(unreachable_code)]
+        if occupied > inner_w * inner_h {
             return;
         }
         loop {
