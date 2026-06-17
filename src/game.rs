@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use rand::Rng;
 use crossterm::event::KeyEvent;
@@ -73,7 +73,6 @@ pub struct SnakeGame {
     snake: RefCell<Vec<(usize, usize)>>,
     direction: RefCell<Direction>,
     apple: RefCell<(usize, usize)>,
-    last_tick: RefCell<Instant>,
     rec_evs: Rc<RefCell<ReceivableEvents>>,
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
@@ -88,6 +87,10 @@ pub struct SnakeGame {
     // Last-known board dimensions for Auto mode
     last_board_w: RefCell<usize>,
     last_board_h: RefCell<usize>,
+    // True after board has been initialized with valid dimensions
+    board_initialized: RefCell<bool>,
+    // Track board size to detect mid-game changes
+    last_board_size: RefCell<BoardSize>,
 }
 
 fn fg_style(color: Color) -> Style {
@@ -101,16 +104,7 @@ fn fg_style(color: Color) -> Style {
 
 #[allow(dead_code)]
 impl SnakeGame {
-    pub fn new(ctx: &Context, ctrl: &ControlState, width: usize, height: usize) -> Self {
-        let cx = width / 2;
-        let cy = height / 2;
-
-        let snake = vec![
-            (cx, cy),
-            (cx.saturating_sub(1), cy),
-            (cx.saturating_sub(2), cy),
-        ];
-
+    pub fn new(ctx: &Context, ctrl: &ControlState) -> Self {
         let mut rec_evs = ReceivableEvents::default();
         for &key in &[
             Keyboard::KEY_H,
@@ -129,10 +123,9 @@ impl SnakeGame {
 
         let game = SnakeGame {
             pane: Pane::new(ctx, "snake_game"),
-            snake: RefCell::new(snake),
+            snake: RefCell::new(Vec::new()),
             direction: RefCell::new(Direction::Right),
             apple: RefCell::new((0, 0)),
-            last_tick: RefCell::new(Instant::now()),
             rec_evs: Rc::new(RefCell::new(rec_evs)),
             // Shared state
             ctrl_tick_interval: ctrl.tick_interval.clone(),
@@ -144,10 +137,11 @@ impl SnakeGame {
             ctrl_score_label: ctrl.score_label.clone(),
             ctrl_high_score_label: ctrl.high_score_label.clone(),
             ctrl_status_label: ctrl.status_label.clone(),
-            last_board_w: RefCell::new(width),
-            last_board_h: RefCell::new(height),
+            last_board_w: RefCell::new(0),
+            last_board_h: RefCell::new(0),
+            board_initialized: RefCell::new(false),
+            last_board_size: RefCell::new(*ctrl.board_size.borrow()),
         };
-        game.spawn_apple(width, height);
         game
     }
 
@@ -183,10 +177,6 @@ impl SnakeGame {
         *self.ctrl_tick_interval.borrow()
     }
 
-    pub fn last_tick(&self) -> Instant {
-        *self.last_tick.borrow()
-    }
-
     pub fn board_size(&self) -> BoardSize {
         *self.ctrl_board_size.borrow()
     }
@@ -214,6 +204,25 @@ impl SnakeGame {
             GameState::GameOver => "Game Over".into(),
         };
         self.ctrl_status_label.set_text(text);
+    }
+
+    /// Initialize snake, apple and score for the given board dimensions.
+    fn init_board(&self, bw: usize, bh: usize) {
+        let cx = bw / 2;
+        let cy = bh / 2;
+        let snake = vec![
+            (cx, cy),
+            (cx.saturating_sub(1), cy),
+            (cx.saturating_sub(2), cy),
+        ];
+        *self.snake.borrow_mut() = snake;
+        *self.direction.borrow_mut() = Direction::Right;
+        *self.ctrl_score.borrow_mut() = 0;
+        *self.ctrl_state.borrow_mut() = GameState::Running;
+        self.spawn_apple(bw, bh);
+        self.sync_score_labels();
+        self.sync_status_label();
+        *self.board_initialized.borrow_mut() = true;
     }
 }
 
@@ -323,6 +332,11 @@ impl Element for SnakeGame {
 
         if pane_w < 4 || pane_h < 4 {
             return Vec::new();
+        }
+
+        // Initialize board on first draw with actual pane dimensions
+        if !*self.board_initialized.borrow() {
+            self.init_board(board_w, board_h);
         }
 
         let mut chs = Vec::new();
@@ -506,17 +520,16 @@ impl SnakeGame {
             ),
             BoardSize::Fixed(w, h) => (w, h),
         };
-        let cx = bw / 2;
-        let cy = bh / 2;
-        let snake = vec![(cx, cy), (cx.saturating_sub(1), cy), (cx.saturating_sub(2), cy)];
-        *self.snake.borrow_mut() = snake;
-        *self.direction.borrow_mut() = Direction::Right;
-        *self.ctrl_score.borrow_mut() = 0;
-        *self.ctrl_state.borrow_mut() = GameState::Running;
-        *self.last_tick.borrow_mut() = Instant::now();
-        self.spawn_apple(bw, bh);
-        self.sync_score_labels();
-        self.sync_status_label();
+        if bw > 0 && bh > 0 {
+            self.init_board(bw, bh);
+        } else {
+            // Board not yet drawn; defer initialization to next draw
+            *self.board_initialized.borrow_mut() = false;
+            *self.ctrl_score.borrow_mut() = 0;
+            *self.ctrl_state.borrow_mut() = GameState::Running;
+            self.sync_score_labels();
+            self.sync_status_label();
+        }
     }
 
     fn sync_score_labels(&self) {
@@ -531,11 +544,18 @@ impl SnakeGame {
             return;
         }
 
-        let interval = *self.ctrl_tick_interval.borrow();
-        if self.last_tick.borrow().elapsed() < interval {
+        // Skip if board not yet initialized by drawing()
+        if !*self.board_initialized.borrow() {
             return;
         }
-        *self.last_tick.borrow_mut() = Instant::now();
+
+        // Detect board size change mid-game; restart to reposition snake/apple
+        let new_board_size = *self.ctrl_board_size.borrow();
+        if new_board_size != *self.last_board_size.borrow() {
+            *self.last_board_size.borrow_mut() = new_board_size;
+            self.restart();
+            return;
+        }
 
         let dir = *self.direction.borrow();
         let (bw, bh) = match *self.ctrl_board_size.borrow() {
@@ -549,11 +569,12 @@ impl SnakeGame {
         let mut snake = self.snake.borrow_mut();
         let (hx, hy) = snake[0];
 
+        // Consistent wrapping arithmetic for all directions; bounds check catches OOB.
         let (nx, ny) = match dir {
             Direction::Up => (hx, hy.wrapping_sub(1)),
-            Direction::Down => (hx, hy.saturating_add(1)),
+            Direction::Down => (hx, hy.wrapping_add(1)),
             Direction::Left => (hx.wrapping_sub(1), hy),
-            Direction::Right => (hx.saturating_add(1), hy),
+            Direction::Right => (hx.wrapping_add(1), hy),
         };
         let eating = (nx, ny) == apple;
 

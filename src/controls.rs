@@ -160,6 +160,7 @@ pub fn build_control_bar(
     stack.push(Box::new(slider));
 
     // --- Difficulty dropdown ---
+    let diff_tick_interval = state.tick_interval.clone();
     let diff_dropdown = DropdownList::new(
         ctx,
         vec!["Slow", "Medium", "Fast", "Insane"],
@@ -172,6 +173,9 @@ pub fn build_control_bar(
                 _ => 0.0,
             };
             *slider_pos.borrow_mut() = pos;
+            // Also update tick_interval directly; setting slider_pos alone does not trigger adjust_fn.
+            let ms = (500.0 - pos * 450.0) as u64;
+            *diff_tick_interval.borrow_mut() = Duration::from_millis(ms);
             EventResponses::default()
         }),
     );
