@@ -3,6 +3,13 @@ name = "snek"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "snek"
+path = "src/main.rs"
+
 [dependencies]
 yeehaw = { path = "../yeehaw/yeehaw", features = ["textbox"] }
 rand = "0.8"

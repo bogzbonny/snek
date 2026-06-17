@@ -126,10 +126,10 @@ impl ControlState {
             theme: Rc::new(RefCell::new(Theme::Classic)),
             score: Rc::new(RefCell::new(0)),
             high_score: Rc::new(RefCell::new(0)),
-            state: Rc::new(RefCell::new(GameState::Running)),
+            state: Rc::new(RefCell::new(GameState::Paused)),
             score_label: Rc::new(Label::new(ctx, "Score: 0")),
             high_score_label: Rc::new(Label::new(ctx, "Best: 0")),
-            status_label: Rc::new(Label::new(ctx, "Running")),
+            status_label: Rc::new(Label::new(ctx, "Paused")),
         }
     }
 }

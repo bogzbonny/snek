@@ -18,7 +18,7 @@ pub enum BoardSize {
     Fixed(usize, usize),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Direction {
     Up,
     Down,
@@ -26,7 +26,7 @@ pub enum Direction {
     Right,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum GameState {
     Running,
     Paused,
@@ -218,10 +218,8 @@ impl SnakeGame {
         *self.snake.borrow_mut() = snake;
         *self.direction.borrow_mut() = Direction::Right;
         *self.ctrl_score.borrow_mut() = 0;
-        *self.ctrl_state.borrow_mut() = GameState::Running;
         self.spawn_apple(bw, bh);
         self.sync_score_labels();
-        self.sync_status_label();
         *self.board_initialized.borrow_mut() = true;
     }
 }
@@ -262,6 +260,20 @@ impl Element for SnakeGame {
             )
         };
 
+        // Map key to direction without reversal protection.
+        // Used in Paused state where no movement has occurred yet.
+        let key_to_direction = |k: KeyEvent| -> Direction {
+            if k == Keyboard::KEY_K || k == Keyboard::KEY_UP {
+                Direction::Up
+            } else if k == Keyboard::KEY_J || k == Keyboard::KEY_DOWN {
+                Direction::Down
+            } else if k == Keyboard::KEY_H || k == Keyboard::KEY_LEFT {
+                Direction::Left
+            } else {
+                Direction::Right
+            }
+        };
+
         let key = match ev {
             Event::KeyCombo(keys) if keys.len() == 1 => keys[0],
             _ => return (false, EventResponses::default()),
@@ -273,7 +285,10 @@ impl Element for SnakeGame {
 
         match state {
             GameState::Paused => {
-                if key == Keyboard::KEY_SPACE {
+                if key == Keyboard::KEY_SPACE || is_dir_key(key) {
+                    if is_dir_key(key) {
+                        *self.direction.borrow_mut() = key_to_direction(key);
+                    }
                     *self.ctrl_state.borrow_mut() = GameState::Running;
                     self.sync_status_label();
                 }
@@ -522,10 +537,10 @@ impl SnakeGame {
             // Board not yet drawn; defer initialization to next draw
             *self.board_initialized.borrow_mut() = false;
             *self.ctrl_score.borrow_mut() = 0;
-            *self.ctrl_state.borrow_mut() = GameState::Running;
             self.sync_score_labels();
-            self.sync_status_label();
         }
+        *self.ctrl_state.borrow_mut() = GameState::Running;
+        self.sync_status_label();
     }
 
     fn sync_score_labels(&self) {
