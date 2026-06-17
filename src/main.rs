@@ -42,8 +42,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     stack.push(control_bar);
 
+    // Focus containers so can_receive() gates pass during Tui event dispatch.
+    // ParentPane::can_receive() requires self.get_focused() == true before
+    // checking children, and VerticalStack delegates to its inner ParentPane.
+    stack.set_focused(true);
+
     let root = ParentPane::new(&ctx, "root");
     root.add_element(Box::new(stack));
+    root.set_focused(true);
 
     // Tick loop — interval resets when the shared duration changes
     let tick_ctx = ctx.clone();

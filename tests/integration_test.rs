@@ -1,6 +1,6 @@
 #![allow(unused_must_use)]
 
-use yeehaw::{Element, Event, Keyboard, Tui};
+use yeehaw::{Element, Event, Keyboard, ParentPane, Tui, VerticalStack};
 
 use snek::controls::ControlState;
 use snek::game::{BoardSize, Direction, GameState, SnakeGame};
@@ -373,5 +373,135 @@ fn test_direction_change_while_running_then_tick() {
         game.snake()[0],
         (9, 4),
         "tick after direction change should move in new direction"
+    );
+}
+
+// ============================================================================
+// Container hierarchy dispatch tests — verify events reach SnakeGame through
+// focused ParentPane → VerticalStack → SnakeGame (the fix for the original bug
+// where unfocused containers blocked can_receive() gates).
+//
+// Key detail: Pane::clone() creates a NEW focused: RefCell<bool>. The clone
+// inherits the focus VALUE at clone time, not a shared reference. So the game
+// must be focused BEFORE cloning for the clone in the stack to be focused.
+// ============================================================================
+
+/// Build hierarchy with explicit focus control.
+/// focus_stack: whether to focus the VerticalStack before adding to root.
+/// focus_game: whether to focus the game before cloning into the stack.
+fn make_hierarchy(focus_stack: bool, focus_game: bool) -> (SnakeGame, ParentPane, yeehaw::Context) {
+    use yeehaw::DynVal;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let (_tui, ctx) = Tui::new().expect("failed to create Tui");
+    let ctrl = ControlState::new(&ctx);
+    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let game = SnakeGame::new(&ctx, &ctrl);
+    game.restart();
+    *ctrl.state.borrow_mut() = GameState::Paused;
+
+    // Focus game BEFORE cloning so the clone inherits focused=true.
+    // Pane::clone() copies the RefCell value, not the reference.
+    if focus_game {
+        game.set_focused(true);
+    }
+
+    // VerticalStack with game only (no control bar to avoid widget key conflicts)
+    let mut stack = VerticalStack::new(&ctx);
+    {
+        let mut loc = game.get_dyn_location_set().clone();
+        loc.set_dyn_height(DynVal::new_flex(1.0));
+        game.set_dyn_location_set(loc);
+    }
+    stack.push(Box::new(game.clone()));
+
+    // Focus stack before adding to root
+    if focus_stack {
+        stack.set_focused(true);
+    }
+
+    let root = ParentPane::new(&ctx, "root");
+    root.add_element(Box::new(stack));
+
+    (game, root, ctx)
+}
+
+#[test]
+fn test_hierarchy_dispatch_all_focused_reaches_game() {
+    let (game, root, ctx) = make_hierarchy(true, true);
+
+    // Dispatch KEY_K through root — must reach the game
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
+
+    assert_eq!(game.state(), GameState::Running, "game must start via hierarchy dispatch");
+    assert_eq!(game.direction(), Direction::Up, "direction must be Up via hierarchy dispatch");
+}
+
+#[test]
+fn test_hierarchy_dispatch_all_direction_keys() {
+    let (game, root, ctx) = make_hierarchy(true, true);
+    // Initial direction is Right (from restart). Start with Up to avoid
+    // the opposite-direction rejection on the first key.
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
+    assert_eq!(game.direction(), Direction::Up);
+
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
+    assert_eq!(game.direction(), Direction::Left);
+
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_J]));
+    assert_eq!(game.direction(), Direction::Down);
+
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_L]));
+    assert_eq!(game.direction(), Direction::Right);
+}
+
+#[test]
+fn test_hierarchy_dispatch_arrow_keys() {
+    let (game, root, ctx) = make_hierarchy(true, true);
+    // Initial direction is Right. Start with Up to avoid opposite rejection.
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_UP]));
+    assert_eq!(game.direction(), Direction::Up);
+
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_LEFT]));
+    assert_eq!(game.direction(), Direction::Left);
+
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_DOWN]));
+    assert_eq!(game.direction(), Direction::Down);
+
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_RIGHT]));
+    assert_eq!(game.direction(), Direction::Right);
+}
+
+#[test]
+fn test_hierarchy_dispatch_blocks_when_stack_unfocused() {
+    // VerticalStack::can_receive() → ParentPane::can_receive() has a hard
+    // focus gate. When the stack is unfocused, events cannot reach children.
+    let (game, root, ctx) = make_hierarchy(false, true);
+
+    let initial_state = game.state();
+    let initial_dir = game.direction();
+    let captured = root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
+
+    assert_eq!(
+        game.state(),
+        initial_state,
+        "unfocused stack must block event dispatch to children"
+    );
+    assert_eq!(game.direction(), initial_dir, "direction should not change");
+}
+
+#[test]
+fn test_hierarchy_dispatch_blocks_when_game_unfocused() {
+    // Even with focused stack, the target element must be focused.
+    let (game, root, ctx) = make_hierarchy(true, false);
+
+    let initial_state = game.state();
+    root.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_K]));
+
+    assert_eq!(
+        game.state(),
+        initial_state,
+        "unfocused game must not receive events even when stack is focused"
     );
 }

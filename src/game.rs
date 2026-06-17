@@ -1,12 +1,12 @@
 use std::cell::RefCell;
 use std::time::Duration;
 
-use rand::Rng;
 use crossterm::event::KeyEvent;
+use rand::Rng;
 use yeehaw::{
     Attributes, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element, ElementID,
-    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Label, Pane, ReceivableEvent,
-    ReceivableEvents, Ref, Rc, Style,
+    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Label, Pane, Rc, ReceivableEvent,
+    ReceivableEvents, Ref, Style,
 };
 
 use crate::controls::ControlState;
@@ -70,8 +70,8 @@ impl Theme {
 #[derive(Clone)]
 pub struct SnakeGame {
     pane: Pane,
-    snake: RefCell<Vec<(usize, usize)>>,
-    direction: RefCell<Direction>,
+    snake: Rc<RefCell<Vec<(usize, usize)>>>,
+    direction: Rc<RefCell<Direction>>,
     apple: RefCell<(usize, usize)>,
     // Shared state refs — bidirectional sync with control bar
     ctrl_tick_interval: Rc<RefCell<Duration>>,
@@ -122,11 +122,12 @@ impl SnakeGame {
 
         let pane = Pane::new(ctx, "snake_game");
         pane.set_focused_receivable_events(rec_evs);
+        pane.set_focused(true);
 
         let game = SnakeGame {
             pane,
-            snake: RefCell::new(Vec::new()),
-            direction: RefCell::new(Direction::Right),
+            snake: Rc::new(RefCell::new(Vec::new())),
+            direction: Rc::new(RefCell::new(Direction::Right)),
             apple: RefCell::new((0, 0)),
             // Shared state
             ctrl_tick_interval: ctrl.tick_interval.clone(),
@@ -376,19 +377,51 @@ impl Element for SnakeGame {
         let bt = border_y;
         let bb = border_y + board_h + 1;
 
-        chs.push(DrawChPos::new(DrawCh::new('┌', border_color.clone()), bl as u16, bt as u16));
-        chs.push(DrawChPos::new(DrawCh::new('┐', border_color.clone()), br_ as u16, bt as u16));
-        chs.push(DrawChPos::new(DrawCh::new('└', border_color.clone()), bl as u16, bb as u16));
-        chs.push(DrawChPos::new(DrawCh::new('┘', border_color.clone()), br_ as u16, bb as u16));
+        chs.push(DrawChPos::new(
+            DrawCh::new('┌', border_color.clone()),
+            bl as u16,
+            bt as u16,
+        ));
+        chs.push(DrawChPos::new(
+            DrawCh::new('┐', border_color.clone()),
+            br_ as u16,
+            bt as u16,
+        ));
+        chs.push(DrawChPos::new(
+            DrawCh::new('└', border_color.clone()),
+            bl as u16,
+            bb as u16,
+        ));
+        chs.push(DrawChPos::new(
+            DrawCh::new('┘', border_color.clone()),
+            br_ as u16,
+            bb as u16,
+        ));
 
         for x in (bl + 1)..br_ {
-            chs.push(DrawChPos::new(DrawCh::new('─', border_color.clone()), x as u16, bt as u16));
-            chs.push(DrawChPos::new(DrawCh::new('─', border_color.clone()), x as u16, bb as u16));
+            chs.push(DrawChPos::new(
+                DrawCh::new('─', border_color.clone()),
+                x as u16,
+                bt as u16,
+            ));
+            chs.push(DrawChPos::new(
+                DrawCh::new('─', border_color.clone()),
+                x as u16,
+                bb as u16,
+            ));
         }
 
         for y in (bt + 1)..bb {
-            chs.push(DrawChPos::new(DrawCh::new('│', border_color.clone()), bl as u16, y as u16));
-            chs.push(DrawChPos::new(DrawCh::new('│', border_color.clone()), br_ as u16, y as u16));
+            chs.push(DrawChPos::new(
+                DrawCh::new('│', border_color.clone()),
+                bl as u16,
+                y as u16,
+            ));
+            chs.push(DrawChPos::new(
+                DrawCh::new('│', border_color.clone()),
+                br_ as u16,
+                y as u16,
+            ));
         }
 
         let gx = border_x + 1;
@@ -530,10 +563,7 @@ impl SnakeGame {
 
     pub fn restart(&self) {
         let (bw, bh) = match *self.ctrl_board_size.borrow() {
-            BoardSize::Auto => (
-                *self.last_board_w.borrow(),
-                *self.last_board_h.borrow(),
-            ),
+            BoardSize::Auto => (*self.last_board_w.borrow(), *self.last_board_h.borrow()),
             BoardSize::Fixed(w, h) => (w, h),
         };
         if bw > 0 && bh > 0 {
@@ -552,7 +582,8 @@ impl SnakeGame {
         let score = *self.ctrl_score.borrow();
         let high = *self.ctrl_high_score.borrow();
         self.ctrl_score_label.set_text(format!("Score: {}", score));
-        self.ctrl_high_score_label.set_text(format!("Best: {}", high));
+        self.ctrl_high_score_label
+            .set_text(format!("Best: {}", high));
     }
 
     pub fn tick(&self, _ctx: &Context) {
@@ -576,10 +607,7 @@ impl SnakeGame {
         let dir = *self.direction.borrow();
         let (bw, bh) = match *self.ctrl_board_size.borrow() {
             BoardSize::Fixed(w, h) => (w, h),
-            BoardSize::Auto => (
-                *self.last_board_w.borrow(),
-                *self.last_board_h.borrow(),
-            ),
+            BoardSize::Auto => (*self.last_board_w.borrow(), *self.last_board_h.borrow()),
         };
         let apple = *self.apple.borrow();
         let mut snake = self.snake.borrow_mut();
@@ -602,8 +630,16 @@ impl SnakeGame {
         }
 
         // Exclude tail from collision check when not eating: the tail will move away.
-        let segments_to_check = if eating { snake.len() } else { snake.len().saturating_sub(1) };
-        if snake.iter().take(segments_to_check).any(|&(sx, sy)| sx == nx && sy == ny) {
+        let segments_to_check = if eating {
+            snake.len()
+        } else {
+            snake.len().saturating_sub(1)
+        };
+        if snake
+            .iter()
+            .take(segments_to_check)
+            .any(|&(sx, sy)| sx == nx && sy == ny)
+        {
             drop(snake);
             *self.ctrl_state.borrow_mut() = GameState::GameOver;
             self.sync_status_label();
@@ -613,7 +649,10 @@ impl SnakeGame {
         if (nx, ny) == apple {
             snake.insert(0, (nx, ny));
 
-            let new_score = { *self.ctrl_score.borrow_mut() += 1; *self.ctrl_score.borrow() };
+            let new_score = {
+                *self.ctrl_score.borrow_mut() += 1;
+                *self.ctrl_score.borrow()
+            };
             if new_score > *self.ctrl_high_score.borrow() {
                 *self.ctrl_high_score.borrow_mut() = new_score;
             }
