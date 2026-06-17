@@ -6,7 +6,7 @@ use crossterm::event::KeyEvent;
 use rand::Rng;
 use yeehaw::{
     Attributes, Color, Context, DrawCh, DrawChPos, DrawRegion, DrawUpdate, Element, ElementID,
-    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Label, Pane, Rc, ReceivableEvent,
+    Event, EventResponse, EventResponses, FgTranspSrc, Keyboard, Pane, Rc, ReceivableEvent,
     ReceivableEvents, Ref, Style,
 };
 
@@ -82,9 +82,6 @@ pub struct SnakeGame {
     ctrl_score: Rc<RefCell<usize>>,
     ctrl_high_score: Rc<RefCell<usize>>,
     ctrl_state: Rc<RefCell<GameState>>,
-    ctrl_score_label: Rc<Label>,
-    ctrl_high_score_label: Rc<Label>,
-    ctrl_status_label: Rc<Label>,
     // Last-known board dimensions for Auto mode (Rc so clones share state with original)
     last_board_w: Rc<RefCell<usize>>,
     last_board_h: Rc<RefCell<usize>>,
@@ -140,9 +137,6 @@ impl SnakeGame {
             ctrl_score: ctrl.score.clone(),
             ctrl_high_score: ctrl.high_score.clone(),
             ctrl_state: ctrl.state.clone(),
-            ctrl_score_label: ctrl.score_label.clone(),
-            ctrl_high_score_label: ctrl.high_score_label.clone(),
-            ctrl_status_label: ctrl.status_label.clone(),
             last_board_w: Rc::new(RefCell::new(0)),
             last_board_h: Rc::new(RefCell::new(0)),
             board_initialized: Rc::new(RefCell::new(false)),
@@ -205,15 +199,6 @@ impl SnakeGame {
         self.direction_queue.borrow_mut().clear();
     }
 
-    fn sync_status_label(&self) {
-        let text: String = match *self.ctrl_state.borrow() {
-            GameState::Running => "Running".into(),
-            GameState::Paused => "Paused".into(),
-            GameState::GameOver => format!("Game Over — score: {}", *self.ctrl_score.borrow()),
-        };
-        self.ctrl_status_label.set_text(text);
-    }
-
     /// Initialize snake, apple and score for the given board dimensions.
     fn init_board(&self, bw: usize, bh: usize) {
         // Guard: inner spawn area must be large enough for an apple.
@@ -236,7 +221,6 @@ impl SnakeGame {
         *self.direction.borrow_mut() = Direction::Right;
         *self.ctrl_score.borrow_mut() = 0;
         self.spawn_apple(bw, bh);
-        self.sync_score_labels();
         *self.board_initialized.borrow_mut() = true;
     }
 }
@@ -317,7 +301,6 @@ impl Element for SnakeGame {
                         }
                     }
                     *self.ctrl_state.borrow_mut() = GameState::Running;
-                    self.sync_status_label();
                     // Move snake immediately on first direction key press.
                     if is_dir_key(key) {
                         self.tick(ctx);
@@ -327,7 +310,6 @@ impl Element for SnakeGame {
             GameState::Running => {
                 if key == Keyboard::KEY_SPACE {
                     *self.ctrl_state.borrow_mut() = GameState::Paused;
-                    self.sync_status_label();
                 } else if is_dir_key(key) {
                     let new_dir = key_to_direction(key);
                     let mut q = self.direction_queue.borrow_mut();
@@ -362,7 +344,7 @@ impl Element for SnakeGame {
         let (board_w, board_h, border_x, border_y) = match board_size {
             BoardSize::Auto => {
                 let w = pane_w.saturating_sub(2);
-                let h = pane_h.saturating_sub(2);
+                let h = pane_h.saturating_sub(3); // reserve 1 row for status line
                 // Only cache dimensions when the inner spawn area is large enough
                 // for spawn_apple to work (inner_w * inner_h >= 4).  This prevents
                 // layout-probe draws with tiny DrawRegions from corrupting the
@@ -530,6 +512,27 @@ impl Element for SnakeGame {
             }
         }
 
+        // Render status line below the board
+        let status_y = bb + 1;
+        if status_y < pane_h {
+            let score = *self.ctrl_score.borrow();
+            let high = *self.ctrl_high_score.borrow();
+            let state_text = match *self.ctrl_state.borrow() {
+                GameState::Running => "Running",
+                GameState::Paused => "Paused",
+                GameState::GameOver => "Game Over",
+            };
+            let status_str = format!("Score: {}  Best: {}  {}", score, high, state_text);
+            let start_x = pane_w.saturating_sub(status_str.len()) / 2;
+            for (i, ch) in status_str.chars().enumerate() {
+                chs.push(DrawChPos::new(
+                    DrawCh::new(ch, default_style.clone()),
+                    (start_x + i) as u16,
+                    status_y as u16,
+                ));
+            }
+        }
+
         DrawUpdate::update(chs).into()
     }
 
@@ -671,19 +674,9 @@ impl SnakeGame {
             // Board not yet drawn; defer initialization to next draw
             *self.board_initialized.borrow_mut() = false;
             *self.ctrl_score.borrow_mut() = 0;
-            self.sync_score_labels();
         }
         *self.ctrl_state.borrow_mut() = GameState::Paused;
         self.direction_queue.borrow_mut().clear();
-        self.sync_status_label();
-    }
-
-    fn sync_score_labels(&self) {
-        let score = *self.ctrl_score.borrow();
-        let high = *self.ctrl_high_score.borrow();
-        self.ctrl_score_label.set_text(format!("Score: {}", score));
-        self.ctrl_high_score_label
-            .set_text(format!("Best: {}", high));
     }
 
     pub fn tick(&self, _ctx: &Context) {
@@ -741,7 +734,6 @@ impl SnakeGame {
         if nx >= bw || ny >= bh {
             drop(snake);
             *self.ctrl_state.borrow_mut() = GameState::GameOver;
-            self.sync_status_label();
             return;
         }
 
@@ -758,7 +750,6 @@ impl SnakeGame {
         {
             drop(snake);
             *self.ctrl_state.borrow_mut() = GameState::GameOver;
-            self.sync_status_label();
             return;
         }
 
@@ -784,7 +775,6 @@ impl SnakeGame {
                 };
                 Config::save_values(speed_ms, &board_size, theme, new_score);
             }
-            self.sync_score_labels();
 
             drop(snake);
             self.spawn_apple(bw, bh);
