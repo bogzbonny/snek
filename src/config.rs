@@ -12,6 +12,18 @@ pub struct Config {
     pub num_apples: usize,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            speed_ms: 26,
+            board_size: "Auto".to_string(),
+            theme: "Classic".to_string(),
+            high_score: 0,
+            num_apples: 1,
+        }
+    }
+}
+
 impl Config {
     fn default_config() -> Self {
         Self {

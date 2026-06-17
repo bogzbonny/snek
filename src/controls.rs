@@ -5,8 +5,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use yeehaw::{
-    Button, Context, DropdownList, DynVal, Element, EventResponses, HorizontalStackFocuser,
-    Label, Slider, VerticalStack,
+    Button, Context, DropdownList, DynVal, Element, EventResponses, HorizontalStackFocuser, Label,
+    Slider, VerticalStack,
 };
 
 use crate::config::Config;
@@ -29,22 +29,13 @@ impl ControlState {
         Self::from_loaded(cfg)
     }
 
-    /// Create a ControlState with hardcoded defaults. Does not read from disk.
+    /// Create a ControlState with default values. Does not read from disk.
     pub fn for_test() -> Self {
-        Self {
-            tick_interval: Rc::new(RefCell::new(Duration::from_millis(26))),
-            board_size: Rc::new(RefCell::new(BoardSize::Auto)),
-            theme: Rc::new(RefCell::new(Theme::Classic)),
-            score: Rc::new(RefCell::new(0)),
-            high_score: Rc::new(RefCell::new(0)),
-            state: Rc::new(RefCell::new(GameState::Paused)),
-            num_apples: Rc::new(RefCell::new(1)),
-        }
+        Self::from_loaded(Config::default())
     }
 
     /// Create a ControlState from a Config instance.
     pub fn from_loaded(cfg: Config) -> Self {
-
         let board_size = match cfg.board_size.as_str() {
             "Auto" => BoardSize::Auto,
             s => {
@@ -108,27 +99,33 @@ pub fn build_control_bar(
     row1.push(Box::new(Label::new(ctx, "Speed")));
     row1.push(Box::new(spacer(ctx)));
 
-    let slider = Slider::new_basic_line(ctx);
-    *slider.position.borrow_mut() = 0.5;
+    let speed_slider = Slider::new_basic_line(ctx);
+    *speed_slider.position.borrow_mut() = 0.5;
     {
-        let mut loc = slider.get_dyn_location_set().clone();
+        let mut loc = speed_slider.get_dyn_location_set().clone();
         loc.set_dyn_width(DynVal::new_fixed(50));
-        slider.set_dyn_location_set(loc);
+        speed_slider.set_dyn_location_set(loc);
     }
     let tick_interval = state.tick_interval.clone();
     let board_size = state.board_size.clone();
     let theme = state.theme.clone();
     let high_score = state.high_score.clone();
     let num_apples = state.num_apples.clone();
-    *slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
+    *speed_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 50ms..=2.5ms
         let ms = (50.0 - pos * 47.5) as u64;
         *tick_interval.borrow_mut() = Duration::from_millis(ms);
-        Config::save_values(ms, &board_size_to_str(&board_size.borrow()), theme_to_str(&theme.borrow()), *high_score.borrow(), *num_apples.borrow());
+        Config::save_values(
+            ms,
+            &board_size_to_str(&board_size.borrow()),
+            theme_to_str(&theme.borrow()),
+            *high_score.borrow(),
+            *num_apples.borrow(),
+        );
         EventResponses::default()
     });
-    row1.push(Box::new(slider));
+    row1.push(Box::new(speed_slider));
     row1.push(Box::new(spacer(ctx)));
 
     // Board size dropdown
@@ -151,7 +148,13 @@ pub fn build_control_bar(
                 _ => BoardSize::Auto,
             };
             *board_size.borrow_mut() = bs;
-            Config::save_values(tick_interval.borrow().as_millis() as u64, &board_size_to_str(&board_size.borrow()), theme_to_str(&theme.borrow()), *high_score.borrow(), *num_apples.borrow());
+            Config::save_values(
+                tick_interval.borrow().as_millis() as u64,
+                &board_size_to_str(&board_size.borrow()),
+                theme_to_str(&theme.borrow()),
+                *high_score.borrow(),
+                *num_apples.borrow(),
+            );
             EventResponses::default()
         }),
     );
@@ -175,7 +178,13 @@ pub fn build_control_bar(
                 _ => Theme::Classic,
             };
             *theme.borrow_mut() = t;
-            Config::save_values(tick_interval.borrow().as_millis() as u64, &board_size_to_str(&board_size.borrow()), theme_to_str(&theme.borrow()), *high_score.borrow(), *num_apples.borrow());
+            Config::save_values(
+                tick_interval.borrow().as_millis() as u64,
+                &board_size_to_str(&board_size.borrow()),
+                theme_to_str(&theme.borrow()),
+                *high_score.borrow(),
+                *num_apples.borrow(),
+            );
             EventResponses::default()
         }),
     );
@@ -216,7 +225,13 @@ pub fn build_control_bar(
         // Map 0.0..=1.0 → 1..=100
         let n = (pos * 99.0) as usize + 1;
         *num_apples.borrow_mut() = n;
-        Config::save_values(tick_interval.borrow().as_millis() as u64, &board_size_to_str(&board_size.borrow()), theme_to_str(&theme.borrow()), *high_score.borrow(), n);
+        Config::save_values(
+            tick_interval.borrow().as_millis() as u64,
+            &board_size_to_str(&board_size.borrow()),
+            theme_to_str(&theme.borrow()),
+            *high_score.borrow(),
+            n,
+        );
         EventResponses::default()
     });
     row2.push(Box::new(apple_slider));

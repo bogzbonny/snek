@@ -9,12 +9,32 @@ use yeehaw::{
     VerticalStack,
 };
 
+use config::Config;
 use controls::ControlState;
 use game::{BoardSize, Direction, GameState, SnekGame};
 
+/// Create a ControlState with a fixed board size from an in-memory Config.
+fn ctrl_fixed(w: usize, h: usize) -> ControlState {
+    let cfg = Config {
+        board_size: format!("{}x{}", w, h),
+        ..Config::default()
+    };
+    ControlState::from_loaded(cfg)
+}
+
+/// Create a ControlState with custom board size and apple count from an in-memory Config.
+fn ctrl_fixed_with_apples(w: usize, h: usize, num_apples: usize) -> ControlState {
+    let cfg = Config {
+        board_size: format!("{}x{}", w, h),
+        num_apples,
+        ..Config::default()
+    };
+    ControlState::from_loaded(cfg)
+}
+
 fn make_game() -> (SnekGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
+    let ctrl = ControlState::from_loaded(Config::default());
     let game = SnekGame::new(&ctx, &ctrl);
     (game, ctrl, ctx)
 }
@@ -23,8 +43,7 @@ fn make_game() -> (SnekGame, ControlState, yeehaw::Context) {
 /// snek head starts at (10, 5), direction Right.
 fn make_initialized_game() -> (SnekGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
     let game = SnekGame::new(&ctx, &ctrl);
     game.restart(); // initializes board: head=(10,5), body=(9,5), tail=(8,5), dir=Right
     *ctrl.state.borrow_mut() = GameState::Paused;
@@ -35,9 +54,7 @@ fn make_initialized_game() -> (SnekGame, ControlState, yeehaw::Context) {
 #[test]
 fn test_apples_never_overlap() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(40, 20);
-    *ctrl.num_apples.borrow_mut() = 50;
+    let ctrl = ctrl_fixed_with_apples(40, 20, 50);
 
     for _i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -437,8 +454,7 @@ fn make_hierarchy(focus_stack: bool, focus_game: bool) -> (SnekGame, ParentPane,
     use std::rc::Rc;
 
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
     let game = SnekGame::new(&ctx, &ctrl);
     game.restart();
     *ctrl.state.borrow_mut() = GameState::Paused;
@@ -746,8 +762,9 @@ fn test_tick_noop_when_game_over() {
 /// Tick on uninitialized board must be a no-op.
 #[test]
 fn test_tick_noop_when_board_not_initialized() {
-    let (game, ctrl, ctx) = make_game();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let (_tui, ctx) = Tui::new().expect("failed to create Tui");
+    let ctrl = ctrl_fixed(20, 10);
+    let game = SnekGame::new(&ctx, &ctrl);
     *ctrl.state.borrow_mut() = GameState::Running;
 
     // Do NOT call restart() — board is not initialized
@@ -987,8 +1004,7 @@ fn test_apple_not_on_border_after_init() {
 #[test]
 fn test_apple_not_on_border_after_many_restarts() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1006,8 +1022,7 @@ fn test_apple_not_on_border_after_many_restarts() {
 #[test]
 fn test_apple_not_on_border_small_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(10, 8);
+    let ctrl = ctrl_fixed(10, 8);
 
     for i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1026,8 +1041,7 @@ fn test_apple_not_on_border_small_board() {
 #[test]
 fn test_apple_not_in_any_corner() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
 
     let corners = [(0, 0), (19, 0), (0, 9), (19, 9)];
     for i in 0..500 {
@@ -1048,8 +1062,7 @@ fn test_apple_not_in_any_corner() {
 #[test]
 fn test_apple_not_on_left_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1071,8 +1084,7 @@ fn test_apple_not_on_left_border() {
 #[test]
 fn test_apple_not_on_right_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1093,8 +1105,7 @@ fn test_apple_not_on_right_border() {
 #[test]
 fn test_apple_not_on_top_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1115,8 +1126,7 @@ fn test_apple_not_on_top_border() {
 #[test]
 fn test_apple_not_on_bottom_border() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(20, 10);
+    let ctrl = ctrl_fixed(20, 10);
 
     for i in 0..500 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1137,8 +1147,7 @@ fn test_apple_not_on_bottom_border() {
 #[test]
 fn test_apple_on_minimum_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(4, 4);
+    let ctrl = ctrl_fixed(4, 4);
 
     for i in 0..100 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1156,8 +1165,7 @@ fn test_apple_on_minimum_board() {
 #[test]
 fn test_apple_not_on_border_square_board() {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(16, 16);
+    let ctrl = ctrl_fixed(16, 16);
 
     for i in 0..200 {
         let game = game::SnekGame::new(&ctx, &ctrl);
@@ -1294,8 +1302,7 @@ fn test_restart_clears_direction_queue() {
 #[test]
 fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
     let (_tui, ctx) = Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Auto;
+    let ctrl = ControlState::from_loaded(Config::default());
     let game = SnekGame::new(&ctx, &ctrl);
 
     // 1) Initialise board with a large DrawRegion (80x40 pane → 78x38 board)
@@ -1334,8 +1341,7 @@ fn auto_mode_cache_must_not_shrink_on_small_drawregion() {
 /// direction Right. Inner spawn area is (1..5)×(1..3) = 8 cells.
 fn make_tiny_game() -> (SnekGame, ControlState, yeehaw::Context) {
     let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
-    let ctrl = ControlState::for_test();
-    *ctrl.board_size.borrow_mut() = BoardSize::Fixed(6, 4);
+    let ctrl = ctrl_fixed(6, 4);
     let game = SnekGame::new(&ctx, &ctrl);
     game.restart(); // head=(3,2), body=(2,2), tail=(1,2), dir=Right
     *ctrl.state.borrow_mut() = GameState::Paused;
