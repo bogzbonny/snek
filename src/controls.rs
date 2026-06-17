@@ -5,8 +5,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use yeehaw::{
-    Button, Context, DrawRegion, DrawUpdate, DropdownList, Element, ElementID, Event,
-    EventResponses, HorizontalStackFocuser, Label, Parent, ReceivableEvents,
+    Button, Context, DrawRegion, DrawUpdate, DropdownList, DynVal, Element, ElementID,
+    Event, EventResponses, HorizontalStackFocuser, Label, Parent, ReceivableEvents,
     Ref, Slider,
 };
 
@@ -158,6 +158,17 @@ impl ControlState {
     }
 }
 
+/// Fixed-width spacer label for horizontal gaps.
+fn spacer(ctx: &Context) -> Label {
+    let label = Label::new(ctx, " ");
+    {
+        let mut loc = label.get_dyn_location_set().clone();
+        loc.set_dyn_width(DynVal::new_fixed(2));
+        label.set_dyn_location_set(loc);
+    }
+    label
+}
+
 /// Build the bottom control bar as a HorizontalStackFocuser containing all widgets.
 ///
 /// `restart_fn` is called by the Restart button to reset the game.
@@ -170,6 +181,7 @@ pub fn build_control_bar(
 
     // --- Speed label + slider ---
     stack.push(Box::new(Label::new(ctx, "Speed")));
+    stack.push(Box::new(spacer(ctx)));
 
     let slider = Slider::new_basic_line(ctx);
     *slider.position.borrow_mut() = 0.5;
@@ -186,6 +198,7 @@ pub fn build_control_bar(
         EventResponses::default()
     });
     stack.push(Box::new(slider));
+    stack.push(Box::new(spacer(ctx)));
 
     // --- Board size dropdown ---
     let board_size = state.board_size.clone();
@@ -211,6 +224,7 @@ pub fn build_control_bar(
         }),
     );
     stack.push(Box::new(size_dropdown));
+    stack.push(Box::new(spacer(ctx)));
 
     // --- Theme dropdown ---
     let theme = state.theme.clone();
@@ -233,15 +247,19 @@ pub fn build_control_bar(
         }),
     );
     stack.push(Box::new(theme_dropdown));
+    stack.push(Box::new(spacer(ctx)));
 
     // --- Score label (shared Rc<Label> via RcLabel wrapper) ---
     stack.push(Box::new(RcLabel(state.score_label.clone())));
+    stack.push(Box::new(spacer(ctx)));
 
     // --- High score label ---
     stack.push(Box::new(RcLabel(state.high_score_label.clone())));
+    stack.push(Box::new(spacer(ctx)));
 
     // --- Status label ---
     stack.push(Box::new(RcLabel(state.status_label.clone())));
+    stack.push(Box::new(spacer(ctx)));
 
     // --- Restart button ---
     let restart_btn = Button::new(ctx, "Restart").with_fn(Box::new(move |_btn, _ctx| {

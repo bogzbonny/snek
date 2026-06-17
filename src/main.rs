@@ -31,14 +31,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     {
         let mut loc = game.get_dyn_location_set().clone();
-        loc.set_dyn_height(DynVal::new_flex(0.8));
+        loc.set_dyn_height(DynVal::new_flex(1.0));
         game.set_dyn_location_set(loc);
     }
     stack.push(Box::new(game));
 
     {
         let mut loc = control_bar.get_dyn_location_set().clone();
-        loc.set_dyn_height(DynVal::new_flex(0.2));
+        loc.set_dyn_height(DynVal::new_fixed(1));
         control_bar.set_dyn_location_set(loc);
     }
     stack.push(control_bar);
