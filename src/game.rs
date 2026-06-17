@@ -236,15 +236,11 @@ impl Element for SnakeGame {
     }
 
     fn can_receive(&self, ev: &Event) -> bool {
-        self.get_focused() && self.rec_evs.borrow().contains_match(ev)
+        self.rec_evs.borrow().contains_match(ev)
     }
 
     fn receivable(&self) -> Vec<Rc<RefCell<ReceivableEvents>>> {
-        if self.get_focused() {
-            vec![self.rec_evs.clone()]
-        } else {
-            Vec::new()
-        }
+        vec![self.rec_evs.clone()]
     }
 
     fn receive_event(&self, _ctx: &Context, ev: Event) -> (bool, EventResponses) {
