@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
@@ -25,7 +25,16 @@ impl Config {
 
     pub fn load() -> Self {
         let path = Self::config_path();
-        if let Ok(contents) = fs::read_to_string(&path) {
+        Self::load_from_path(&path)
+    }
+
+    /// Parse config from a TOML string. Returns defaults on parse error.
+    pub fn load_from_str(s: &str) -> Self {
+        toml::from_str::<Self>(s).unwrap_or_else(|_| Self::default_config())
+    }
+
+    fn load_from_path(path: &Path) -> Self {
+        if let Ok(contents) = fs::read_to_string(path) {
             if let Ok(config) = toml::from_str::<Self>(&contents) {
                 return config;
             }
@@ -34,12 +43,16 @@ impl Config {
     }
 
     pub fn save(&self) {
-        let path = Self::config_path();
+        self.save_to_path(&Self::config_path())
+    }
+
+    /// Save config to an arbitrary path. Creates parent directories if needed.
+    pub fn save_to_path(&self, path: &Path) {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
         if let Ok(contents) = toml::to_string(self) {
-            let _ = fs::write(&path, contents);
+            let _ = fs::write(path, contents);
         }
     }
 

@@ -42,7 +42,8 @@ impl ControlState {
         }
     }
 
-    fn from_loaded(cfg: Config) -> Self {
+    /// Create a ControlState from a Config instance.
+    pub fn from_loaded(cfg: Config) -> Self {
 
         let board_size = match cfg.board_size.as_str() {
             "Auto" => BoardSize::Auto,
