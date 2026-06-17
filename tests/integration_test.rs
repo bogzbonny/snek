@@ -32,10 +32,12 @@ fn test_initial_state_is_paused() {
 
 #[test]
 fn test_h_key_starts_game_and_sets_left() {
+    // Default direction is Right. Pressing Left (opposite) from Paused should
+    // start the game but keep direction at Right (opposite-direction guard).
     let (game, _, ctx) = make_game();
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
     assert_eq!(game.state(), GameState::Running);
-    assert_eq!(game.direction(), Direction::Left);
+    assert_eq!(game.direction(), Direction::Right, "opposite direction should be ignored on start");
 }
 
 #[test]
@@ -80,10 +82,12 @@ fn test_arrow_down_starts_game_and_sets_down() {
 
 #[test]
 fn test_arrow_left_starts_game_and_sets_left() {
+    // Default direction is Right. Pressing Left (opposite) from Paused should
+    // start the game but keep direction at Right (opposite-direction guard).
     let (game, _, ctx) = make_game();
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_LEFT]));
     assert_eq!(game.state(), GameState::Running);
-    assert_eq!(game.direction(), Direction::Left);
+    assert_eq!(game.direction(), Direction::Right, "opposite direction should be ignored on start");
 }
 
 #[test]
@@ -219,11 +223,12 @@ fn test_space_does_not_move_snake() {
 #[test]
 fn test_h_key_from_paused_causes_game_over() {
     // Snake is horizontal: head=(10,5), body=(9,5), tail=(8,5), dir=Right.
-    // Pressing Left from Paused sets dir=Left, tick moves head to (9,5) which
-    // collides with the body segment -> Game Over.
+    // Pressing Left from Paused is the opposite direction — the game starts
+    // but keeps direction=Right (opposite-direction guard), so no collision.
     let (game, _, ctx) = make_initialized_game();
     game.receive_event(&ctx, Event::KeyCombo(vec![Keyboard::KEY_H]));
-    assert_eq!(game.state(), GameState::GameOver, "pressing Left should cause self-collision");
+    assert_eq!(game.state(), GameState::Running, "pressing opposite direction should start the game");
+    assert_eq!(game.direction(), Direction::Right, "direction should stay Right");
 }
 
 // ============================================================================
@@ -408,11 +413,11 @@ fn make_hierarchy(focus_stack: bool, focus_game: bool) -> (SnakeGame, ParentPane
     game.restart();
     *ctrl.state.borrow_mut() = GameState::Paused;
 
-    // Focus game BEFORE cloning so the clone inherits focused=true.
+    // Focus game BEFORE cloning so the clone inherits the correct focus state.
     // Pane::clone() copies the RefCell value, not the reference.
-    if focus_game {
-        game.set_focused(true);
-    }
+    // Must explicitly set focus to false when focus_game is false, because
+    // SnakeGame::new sets focused=true by default.
+    game.set_focused(focus_game);
 
     // VerticalStack with game only (no control bar to avoid widget key conflicts)
     let mut stack = VerticalStack::new(&ctx);
@@ -423,10 +428,9 @@ fn make_hierarchy(focus_stack: bool, focus_game: bool) -> (SnakeGame, ParentPane
     }
     stack.push(Box::new(game.clone()));
 
-    // Focus stack before adding to root
-    if focus_stack {
-        stack.set_focused(true);
-    }
+    // Focus stack before adding to root. Must explicitly set focus to false
+    // when focus_stack is false, because ParentPane::new sets focused=true.
+    stack.set_focused(focus_stack);
 
     let root = ParentPane::new(&ctx, "root");
     root.add_element(Box::new(stack));

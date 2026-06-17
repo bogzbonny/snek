@@ -304,7 +304,17 @@ impl Element for SnakeGame {
             GameState::Paused => {
                 if key == Keyboard::KEY_SPACE || is_dir_key(key) {
                     if is_dir_key(key) {
-                        *self.direction.borrow_mut() = key_to_direction(key);
+                        let new_dir = key_to_direction(key);
+                        let cur = *self.direction.borrow();
+                        let opposite = match new_dir {
+                            Direction::Up => Direction::Down,
+                            Direction::Down => Direction::Up,
+                            Direction::Left => Direction::Right,
+                            Direction::Right => Direction::Left,
+                        };
+                        if cur != opposite {
+                            *self.direction.borrow_mut() = new_dir;
+                        }
                     }
                     *self.ctrl_state.borrow_mut() = GameState::Running;
                     self.sync_status_label();
