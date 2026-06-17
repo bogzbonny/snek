@@ -209,7 +209,7 @@ impl SnakeGame {
         let text: String = match *self.ctrl_state.borrow() {
             GameState::Running => "Running".into(),
             GameState::Paused => "Paused".into(),
-            GameState::GameOver => "Game Over".into(),
+            GameState::GameOver => format!("Game Over — score: {}", *self.ctrl_score.borrow()),
         };
         self.ctrl_status_label.set_text(text);
     }
@@ -456,9 +456,15 @@ impl Element for SnakeGame {
         let gx = border_x + 1;
         let gy = border_y + 1;
         let state = *self.ctrl_state.borrow();
-        if state == GameState::Paused {
-            // Draw empty board with title and prompt centered
-            let msgs = ["- snake -", "(press an arrow key to start)"];
+        let overlay_msgs: Option<Vec<String>> = match state {
+            GameState::Paused => Some(vec!["- snake -".into(), "(press an arrow key to start)".into()]),
+            GameState::GameOver => {
+                let score = *self.ctrl_score.borrow();
+                Some(vec!["- game over -".into(), format!("your score: {}", score)])
+            }
+            _ => None,
+        };
+        if let Some(ref msgs) = overlay_msgs {
             for y in 0..board_h {
                 for x in 0..board_w {
                     let sx = gx + x;
