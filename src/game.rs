@@ -215,6 +215,15 @@ impl SnakeGame {
 
     /// Initialize snake, apple and score for the given board dimensions.
     fn init_board(&self, bw: usize, bh: usize) {
+        // Guard: inner spawn area must be large enough for an apple.
+        // If too small, leave board_initialized=false so the next
+        // drawing() call (after a resize) retries.
+        let inner_w = bw.saturating_sub(2);
+        let inner_h = bh.saturating_sub(2);
+        if inner_w * inner_h < 4 {
+            return;
+        }
+
         let cx = bw / 2;
         let cy = bh / 2;
         let snake = vec![
