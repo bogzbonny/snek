@@ -272,7 +272,7 @@ pub fn build_control_bar(
         );
         EventResponses::default()
     });
-    pane.add_element(Box::new(food_slider.at(8, 1)));
+    pane.add_element(Box::new(food_slider.at(7, 1)));
 
     // No walls checkbox
     pane.add_element(Box::new(Label::new(ctx, "No Walls: ").at(60, 1)));
