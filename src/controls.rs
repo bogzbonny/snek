@@ -151,7 +151,7 @@ pub fn build_control_bar(
         let num_foods = num_foods.clone();
         let no_walls = no_walls.clone();
         let emoji_double_width = emoji_double_width.clone();
-        let height_tb = height_tb.clone();
+        let height_tb_clone = height_tb.clone();
         let width_clone = width_tb.clone();
         width_tb.set_hook(Box::new(move |_ctx, is_final, text| {
             if is_final {
@@ -163,7 +163,7 @@ pub fn build_control_bar(
                 return EventResponses::default();
             }
             let w = parse_dim(&text);
-            let h = parse_dim(&height_tb.tb.get_text());
+            let h = parse_dim(&height_tb_clone.tb.get_text());
             let bs = match (w, h) {
                 (Some(w), Some(h)) => BoardSize::Fixed(w, h),
                 _ => BoardSize::Auto,
@@ -189,7 +189,7 @@ pub fn build_control_bar(
         let num_foods = num_foods.clone();
         let no_walls = no_walls.clone();
         let emoji_double_width = emoji_double_width.clone();
-        let width_tb = width_tb.clone();
+        let width_tb_clone = width_tb.clone();
         let height_clone = height_tb.clone();
         height_tb.set_hook(Box::new(move |_ctx, is_final, text| {
             if is_final {
@@ -201,7 +201,7 @@ pub fn build_control_bar(
                 return EventResponses::default();
             }
             let h = parse_dim(&text);
-            let w = parse_dim(&width_tb.tb.get_text());
+            let w = parse_dim(&width_tb_clone.tb.get_text());
             let bs = match (w, h) {
                 (Some(w), Some(h)) => BoardSize::Fixed(w, h),
                 _ => BoardSize::Auto,

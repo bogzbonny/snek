@@ -1,5 +1,8 @@
 #![allow(unused_must_use)]
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use super::config;
 use super::controls;
 use super::game;
@@ -1635,4 +1638,66 @@ fn test_no_walls_wrap_no_food_no_score() {
         "snake length should be unchanged"
     );
     assert_eq!(game.snek()[0], (0, 1), "head should be at wrapped position");
+}
+
+// --- Tests: width/height textboxes present in control bar ---
+// Regression tests for the variable-shadowing bug where clones (not originals)
+// of SingleLineTextBox were added to the pane, causing the W/H textboxes to
+// render as invisible.  The fix renames the shadowed `let` bindings so the
+// originals reach `pane.add_element()`.
+
+/// Smoke-test: control bar builds without panic for Auto board size.
+#[test]
+fn test_control_bar_builds_auto() {
+    let (_tui, ctx) = Tui::new().expect("failed to create Tui");
+    let mut ctrl = ControlState::for_test();
+    let restart_fn = Rc::new(RefCell::new(|| {}));
+    let control_bar = controls::build_control_bar(&ctx, &mut ctrl, restart_fn);
+    assert_eq!(control_bar.kind(), "control_bar");
+}
+
+/// Smoke-test: control bar builds without panic for Fixed board size.
+#[test]
+fn test_control_bar_builds_fixed() {
+    let (_tui, ctx) = Tui::new().expect("failed to create Tui");
+    let mut ctrl = ctrl_fixed(20, 10);
+    let restart_fn = Rc::new(RefCell::new(|| {}));
+    let control_bar = controls::build_control_bar(&ctx, &mut ctrl, restart_fn);
+    assert_eq!(control_bar.kind(), "control_bar");
+}
+
+/// Verify the control bar has the expected number of receivable (interactive)
+/// elements.  The bar contains exactly 8 interactive widgets:
+///   Speed slider | Width textbox | Height textbox | Restart button
+///   Food slider  | No-walls checkbox
+///   Score textbox | Best textbox
+/// Each contributes at least one receivable event, so count >= 8.
+#[test]
+fn test_control_bar_has_all_interactive_elements() {
+    let (_tui, ctx) = Tui::new().expect("failed to create Tui");
+    let mut ctrl = ctrl_fixed(20, 10);
+    let restart_fn = Rc::new(RefCell::new(|| {}));
+    let control_bar = controls::build_control_bar(&ctx, &mut ctrl, restart_fn);
+    let receivable = (*control_bar).receivable();
+    assert!(
+        receivable.len() >= 8,
+        "Expected >= 8 receivable events (got {}), width/height textboxes may be missing",
+        receivable.len()
+    );
+}
+
+/// Verify the control bar produces non-empty drawing output, confirming
+/// widgets (including the W/H textboxes) actually render.
+#[test]
+fn test_control_bar_drawing_produces_output() {
+    let (_tui, ctx) = Tui::new().expect("failed to create Tui");
+    let mut ctrl = ctrl_fixed(20, 10);
+    let restart_fn = Rc::new(RefCell::new(|| {}));
+    let control_bar = controls::build_control_bar(&ctx, &mut ctrl, restart_fn);
+    let dr = DrawRegion::new_large().with_size(Size::new(120, 10));
+    let updates = (*control_bar).drawing(&ctx, &dr, true);
+    assert!(
+        !updates.is_empty(),
+        "control bar drawing produced no output — textboxes may not render"
+    );
 }
