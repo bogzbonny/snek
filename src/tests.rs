@@ -1467,3 +1467,172 @@ fn moving_into_tail_without_food_is_safe() {
     assert_eq!(snek[0], (3, 2), "head moved into old tail position");
     assert_eq!(snek.len(), 4, "length unchanged (no eat)");
 }
+
+/// Create a ControlState with no_walls enabled.
+fn ctrl_fixed_no_walls(w: usize, h: usize) -> ControlState {
+    let cfg = Config {
+        board_size: format!("{}x{}", w, h),
+        no_walls: true,
+        ..Config::default()
+    };
+    ControlState::from_loaded(cfg)
+}
+
+/// Create a tiny game (6x4) with no_walls enabled.
+fn make_tiny_no_walls_game() -> (SnekGame, ControlState, yeehaw::Context) {
+    let (_tui, ctx) = yeehaw::Tui::new().expect("failed to create Tui");
+    let ctrl = ctrl_fixed_no_walls(6, 4);
+    let game = SnekGame::new(&ctx, &ctrl);
+    game.restart();
+    *ctrl.state.borrow_mut() = GameState::Paused;
+    (game, ctrl, ctx)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bug: would_eat is checked at pre-wrap (nx, ny) but food consumption uses
+// post-wrap (nx, ny).  When no_walls wraps the snake, food at the wrapped
+// destination is never eaten (Bug 1: apple disappears, score unchanged).
+// The score increment sits inside the would_eat block, so if would_eat were
+// somehow true at pre-wrap but food is not at post-wrap, the score would
+// increment without consuming food (Bug 2: phantom point).
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_no_walls_wrap_right_eats_food_at_wrapped_position() {
+    // Snake at right edge moving Right wraps to x=0.
+    // Food at (0, 1) should be eaten when snake wraps there.
+    let (game, ctrl, ctx) = make_tiny_no_walls_game();
+
+    // Place food at the wrap destination (0, 1)
+    place_food(&game, 0, 1);
+
+    // Put snake head at right edge (5, 1), moving Right
+    game.set_snek(vec![(5, 1), (4, 1)]);
+    game.set_direction(Direction::Right);
+
+    let score_before = *ctrl.score.borrow();
+    let len_before = game.snek().len();
+
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    assert_eq!(game.state(), GameState::Running, "should not be game over");
+    assert_eq!(
+        *ctrl.score.borrow(),
+        score_before + 1,
+        "score should increase when snake wraps onto food"
+    );
+    assert_eq!(game.snek()[0], (0, 1), "head should be at wrapped position");
+    assert!(
+        game.snek().len() > len_before,
+        "snake should have grown (no tail pop when eating)"
+    );
+}
+
+#[test]
+fn test_no_walls_wrap_left_eats_food_at_wrapped_position() {
+    // Snake at left edge moving Left wraps to x=bw-1.
+    let (game, ctrl, ctx) = make_tiny_no_walls_game();
+
+    place_food(&game, 5, 2); // food at rightmost column
+
+    game.set_snek(vec![(0, 2), (1, 2)]);
+    // Can't set Left directly (opposite of default Right), go via Down first
+    game.set_direction(Direction::Down);
+    game.set_direction(Direction::Left);
+
+    let score_before = *ctrl.score.borrow();
+
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    assert_eq!(game.state(), GameState::Running);
+    assert_eq!(
+        *ctrl.score.borrow(),
+        score_before + 1,
+        "score should increase when snake wraps left onto food"
+    );
+    assert_eq!(game.snek()[0], (5, 2), "head should be at wrapped position");
+}
+
+#[test]
+fn test_no_walls_wrap_down_eats_food_at_wrapped_position() {
+    // Snake at bottom edge moving Down wraps to y=0.
+    let (game, ctrl, ctx) = make_tiny_no_walls_game();
+
+    place_food(&game, 3, 0); // food at top row
+
+    game.set_snek(vec![(3, 3), (3, 2)]);
+    game.set_direction(Direction::Down);
+
+    let score_before = *ctrl.score.borrow();
+
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    assert_eq!(game.state(), GameState::Running);
+    assert_eq!(
+        *ctrl.score.borrow(),
+        score_before + 1,
+        "score should increase when snake wraps down onto food"
+    );
+    assert_eq!(game.snek()[0], (3, 0), "head should be at wrapped position");
+}
+
+#[test]
+fn test_no_walls_wrap_up_eats_food_at_wrapped_position() {
+    // Snake at top edge moving Up wraps to y=bh-1.
+    let (game, ctrl, ctx) = make_tiny_no_walls_game();
+
+    place_food(&game, 3, 3); // food at bottom row
+
+    game.set_snek(vec![(3, 0), (3, 1)]);
+    game.set_direction(Direction::Up);
+
+    let score_before = *ctrl.score.borrow();
+
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    assert_eq!(game.state(), GameState::Running);
+    assert_eq!(
+        *ctrl.score.borrow(),
+        score_before + 1,
+        "score should increase when snake wraps up onto food"
+    );
+    assert_eq!(game.snek()[0], (3, 3), "head should be at wrapped position");
+}
+
+#[test]
+fn test_no_walls_wrap_no_food_no_score() {
+    // Snake wraps but no food at wrapped position — score must not change.
+    let (game, ctrl, ctx) = make_tiny_no_walls_game();
+
+    // No food anywhere — clear the auto-spawned food by placing one at an unused position
+    // Actually, we need to clear foods. Use a workaround: set_food with a dummy, then check.
+    // Since set_food clears and pushes, we can't have zero foods. Skip this test for now.
+    // Instead, just verify wrapping works without eating when food is not at wrap dest.
+    place_food(&game, 3, 2); // food at a position the snake won't reach
+
+    game.set_snek(vec![(5, 1), (4, 1)]);
+    game.set_direction(Direction::Right);
+
+    let score_before = *ctrl.score.borrow();
+    let len_before = game.snek().len();
+
+    *ctrl.state.borrow_mut() = GameState::Running;
+    game.tick(&ctx);
+
+    assert_eq!(game.state(), GameState::Running);
+    assert_eq!(
+        *ctrl.score.borrow(),
+        score_before,
+        "score should NOT increase when no food at wrapped position"
+    );
+    assert_eq!(
+        game.snek().len(),
+        len_before,
+        "snake length should be unchanged"
+    );
+    assert_eq!(game.snek()[0], (0, 1), "head should be at wrapped position");
+}

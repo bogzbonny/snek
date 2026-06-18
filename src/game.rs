@@ -697,14 +697,6 @@ impl SnekGame {
             Direction::Right => (hx.wrapping_add(1), hy),
         };
 
-        // Peek: would we eat food at the next position?  (Do NOT consume yet —
-        // the move must pass bounds / collision validation first so that a
-        // fatal move doesn't silently swallow an apple.)
-        let would_eat = {
-            let foods = self.foods.borrow();
-            foods.iter().any(|f| f.x == nx && f.y == ny && !f.consumed)
-        };
-
         if nx >= bw || ny >= bh {
             if *self.ctrl_no_walls.borrow() {
                 // Wrap to opposite side: nx == bw → 0, nx == usize::MAX → bw-1
@@ -716,6 +708,13 @@ impl SnekGame {
                 return;
             }
         }
+
+        // Peek: would we eat food at the next position? (checked AFTER wrapping
+        // so that no_walls wrap-around lands are evaluated correctly)
+        let would_eat = {
+            let foods = self.foods.borrow();
+            foods.iter().any(|f| f.x == nx && f.y == ny && !f.consumed)
+        };
 
         // Exclude tail from collision check when not eating: the tail will move away.
         let segments_to_check = if would_eat {
