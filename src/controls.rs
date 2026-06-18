@@ -21,6 +21,7 @@ pub struct ControlState {
     pub state: Rc<RefCell<GameState>>,
     pub num_foods: Rc<RefCell<usize>>,
     pub no_walls: Rc<RefCell<bool>>,
+    pub emoji_double_width: Rc<RefCell<bool>>,
     pub score_display: Option<SingleLineTextBox>,
     pub best_display: Option<SingleLineTextBox>,
 }
@@ -63,6 +64,7 @@ impl ControlState {
             state: Rc::new(RefCell::new(GameState::Paused)),
             num_foods: Rc::new(RefCell::new(num_foods)),
             no_walls: Rc::new(RefCell::new(cfg.no_walls)),
+            emoji_double_width: Rc::new(RefCell::new(cfg.emoji_are_double_width)),
             score_display: None,
             best_display: None,
         }
@@ -97,12 +99,13 @@ pub fn build_control_bar(
     let high_score = state.high_score.clone();
     let num_foods = state.num_foods.clone();
     let no_walls = state.no_walls.clone();
+    let emoji_double_width = state.emoji_double_width.clone();
     *speed_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 50ms..=2.5ms
         let ms = (50.0 - pos * 47.5) as u64;
         *tick_interval.borrow_mut() = Duration::from_millis(ms);
-        Config::save_values(ms, &board_size_to_str(&board_size.borrow()), *high_score.borrow(), *num_foods.borrow(), *no_walls.borrow());
+        Config::save_values(ms, &board_size_to_str(&board_size.borrow()), *high_score.borrow(), *num_foods.borrow(), *no_walls.borrow(), *emoji_double_width.borrow());
         EventResponses::default()
     });
     pane.add_element(Box::new(speed_slider.at(7, 0)));
@@ -113,6 +116,7 @@ pub fn build_control_bar(
     let high_score = state.high_score.clone();
     let num_foods = state.num_foods.clone();
     let no_walls = state.no_walls.clone();
+    let emoji_double_width = state.emoji_double_width.clone();
 
     let width_tb = SingleLineTextBox::new(ctx);
     let height_tb = SingleLineTextBox::new(ctx);
@@ -146,6 +150,7 @@ pub fn build_control_bar(
         let high_score = high_score.clone();
         let num_foods = num_foods.clone();
         let no_walls = no_walls.clone();
+        let emoji_double_width = emoji_double_width.clone();
         let height_tb = height_tb.clone();
         let width_clone = width_tb.clone();
         width_tb.set_hook(Box::new(move |_ctx, is_final, text| {
@@ -170,6 +175,7 @@ pub fn build_control_bar(
                 *high_score.borrow(),
                 *num_foods.borrow(),
                 *no_walls.borrow(),
+                *emoji_double_width.borrow(),
             );
             EventResponses::default()
         }));
@@ -182,6 +188,7 @@ pub fn build_control_bar(
         let high_score = high_score.clone();
         let num_foods = num_foods.clone();
         let no_walls = no_walls.clone();
+        let emoji_double_width = emoji_double_width.clone();
         let width_tb = width_tb.clone();
         let height_clone = height_tb.clone();
         height_tb.set_hook(Box::new(move |_ctx, is_final, text| {
@@ -206,6 +213,7 @@ pub fn build_control_bar(
                 *high_score.borrow(),
                 *num_foods.borrow(),
                 *no_walls.borrow(),
+                *emoji_double_width.borrow(),
             );
             EventResponses::default()
         }));
@@ -241,12 +249,14 @@ pub fn build_control_bar(
     let board_size = state.board_size.clone();
     let high_score = state.high_score.clone();
     let no_walls = state.no_walls.clone();
+    let emoji_double_width = state.emoji_double_width.clone();
     // Clones for checkbox callback (must be before food_slider closure moves originals)
     let tick_interval_cb = tick_interval.clone();
     let board_size_cb = board_size.clone();
     let high_score_cb = high_score.clone();
     let num_foods_cb = num_foods.clone();
     let no_walls_cb_ref = no_walls.clone();
+    let emoji_double_width_cb = emoji_double_width.clone();
     *food_slider.adjust_fn.borrow_mut() = Box::new(move |_ctx, s| {
         let pos = *s.position.borrow();
         // Map 0.0..=1.0 → 1..=100
@@ -258,6 +268,7 @@ pub fn build_control_bar(
             *high_score.borrow(),
             n,
             *no_walls.borrow(),
+            *emoji_double_width.borrow(),
         );
         EventResponses::default()
     });
@@ -276,6 +287,7 @@ pub fn build_control_bar(
             *high_score_cb.borrow(),
             *num_foods_cb.borrow(),
             checked,
+            *emoji_double_width_cb.borrow(),
         );
         EventResponses::default()
     }));

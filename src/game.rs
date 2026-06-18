@@ -101,6 +101,7 @@ pub struct SnekGame {
     ctrl_state: Rc<RefCell<GameState>>,
     ctrl_num_foods: Rc<RefCell<usize>>,
     ctrl_no_walls: Rc<RefCell<bool>>,
+    ctrl_emoji_double_width: Rc<RefCell<bool>>,
     // Display textboxes for score/best in control bar
     ctrl_score_display: Option<SingleLineTextBox>,
     ctrl_best_display: Option<SingleLineTextBox>,
@@ -160,6 +161,7 @@ impl SnekGame {
             ctrl_state: ctrl.state.clone(),
             ctrl_num_foods: ctrl.num_foods.clone(),
             ctrl_no_walls: ctrl.no_walls.clone(),
+            ctrl_emoji_double_width: ctrl.emoji_double_width.clone(),
             ctrl_score_display: ctrl.score_display.clone(),
             ctrl_best_display: ctrl.best_display.clone(),
             last_board_w: Rc::new(RefCell::new(0)),
@@ -593,6 +595,7 @@ impl SnekGame {
             return;
         }
         let target = *self.ctrl_num_foods.borrow();
+        let double_width = *self.ctrl_emoji_double_width.borrow();
         let mut foods = self.foods.borrow_mut();
         if target == 0 {
             foods.clear();
@@ -606,11 +609,18 @@ impl SnekGame {
         let occupied: std::collections::HashSet<_> = snek
             .iter()
             .copied()
-            .chain(foods.iter().map(|f| (f.x, f.y)))
+            .chain(foods.iter().flat_map(|f| {
+                if double_width && f.x.saturating_add(1) < bw {
+                    vec![(f.x, f.y), (f.x.saturating_add(1), f.y)]
+                } else {
+                    vec![(f.x, f.y)]
+                }
+            }))
             .collect();
         let free: Vec<_> = (0..bw)
             .flat_map(|x| (0..bh).map(move |y| (x, y)))
             .filter(|p| !occupied.contains(p))
+            .filter(|&(x, _)| !double_width || x.saturating_add(1) < bw)
             .collect();
         drop(snek);
         let mut rng = rand::thread_rng();
@@ -622,6 +632,12 @@ impl SnekGame {
             }
             let idx = rng.gen_range(0..available.len());
             let pos = available.remove(idx);
+            // When double width, also remove the second cell from available
+            if double_width && pos.0.saturating_add(1) < bw {
+                if let Some(i) = available.iter().position(|p| *p == (pos.0.saturating_add(1), pos.1)) {
+                    available.remove(i);
+                }
+            }
             foods.push(Food {
                 kind: FoodKind::RedApple,
                 x: pos.0,
@@ -713,7 +729,12 @@ impl SnekGame {
         // so that no_walls wrap-around lands are evaluated correctly)
         let would_eat = {
             let foods = self.foods.borrow();
-            foods.iter().any(|f| f.x == nx && f.y == ny && !f.consumed)
+            let double_width = *self.ctrl_emoji_double_width.borrow();
+            if double_width {
+                foods.iter().any(|f| f.y == ny && !f.consumed && (f.x == nx || f.x.saturating_add(1) == nx))
+            } else {
+                foods.iter().any(|f| f.x == nx && f.y == ny && !f.consumed)
+            }
         };
 
         // Exclude tail from collision check when not eating: the tail will move away.
@@ -736,8 +757,14 @@ impl SnekGame {
             // Move validated — consume food now.
             {
                 let mut foods = self.foods.borrow_mut();
+                let double_width = *self.ctrl_emoji_double_width.borrow();
                 for f in foods.iter_mut() {
-                    if f.x == nx && f.y == ny && !f.consumed {
+                    let matches = if double_width {
+                        f.y == ny && !f.consumed && (f.x == nx || f.x.saturating_add(1) == nx)
+                    } else {
+                        f.x == nx && f.y == ny && !f.consumed
+                    };
+                    if matches {
                         f.consumed = true;
                         break;
                     }
@@ -758,7 +785,8 @@ impl SnekGame {
                 };
                 let num_foods = *self.ctrl_num_foods.borrow();
                 let no_walls = *self.ctrl_no_walls.borrow();
-                Config::save_values(speed_ms, &board_size, new_score, num_foods, no_walls);
+                let emoji_dw = *self.ctrl_emoji_double_width.borrow();
+                Config::save_values(speed_ms, &board_size, new_score, num_foods, no_walls, emoji_dw);
             }
 
             drop(snek);

@@ -11,6 +11,12 @@ pub struct Config {
     pub num_foods: usize,
     #[serde(default)]
     pub no_walls: bool,
+    #[serde(default = "default_true")]
+    pub emoji_are_double_width: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -21,6 +27,7 @@ impl Default for Config {
             high_score: 0,
             num_foods: 1,
             no_walls: false,
+            emoji_are_double_width: true,
         }
     }
 }
@@ -33,6 +40,7 @@ impl Config {
             high_score: 0,
             num_foods: 1,
             no_walls: false,
+            emoji_are_double_width: true,
         }
     }
 
@@ -70,13 +78,14 @@ impl Config {
     }
 
     /// Save config from individual values.
-    pub fn save_values(speed_ms: u64, board_size: &str, high_score: usize, num_foods: usize, no_walls: bool) {
+    pub fn save_values(speed_ms: u64, board_size: &str, high_score: usize, num_foods: usize, no_walls: bool, emoji_are_double_width: bool) {
         Self {
             speed_ms,
             board_size: board_size.to_string(),
             high_score,
             num_foods,
             no_walls,
+            emoji_are_double_width,
         }
         .save();
     }
