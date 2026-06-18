@@ -275,7 +275,7 @@ pub fn build_control_bar(
     pane.add_element(Box::new(food_slider.at(8, 1)));
 
     // No walls checkbox
-    pane.add_element(Box::new(Label::new(ctx, "No walls").at(60, 1)));
+    pane.add_element(Box::new(Label::new(ctx, "No Walls: ").at(60, 1)));
 
     let no_walls_cb = Checkbox::new(ctx);
     *no_walls_cb.checked.borrow_mut() = *state.no_walls.borrow();
@@ -291,7 +291,7 @@ pub fn build_control_bar(
         );
         EventResponses::default()
     }));
-    pane.add_element(Box::new(no_walls_cb.at(68, 1)));
+    pane.add_element(Box::new(no_walls_cb.at(70, 1)));
 
     // --- Row 2: Score and Best ---
     pane.add_element(Box::new(Label::new(ctx, "Score:").at(0, 2)));
